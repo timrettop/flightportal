@@ -7,8 +7,9 @@ from microcontroller import watchdog as w
 from watchdog import WatchDogMode
 import wifi, socketpool, ssl, adafruit_requests
 
-w.timeout = 60
-w.mode = WatchDogMode.RESET
+# Watchdog disabled - WatchDogMode.RESET not supported on ESP32-S3 in CP9+
+#w.timeout = 60
+#w.mode = WatchDogMode.RESET
 
 def wfeed():
     try: w.feed()
@@ -1677,11 +1678,11 @@ def make_anim_group(landing=False):
 
 def plane_animation():
     pg, tg = make_anim_group(False)
-    matrixportal.display.show(pg)
+    matrixportal.display.root_group = pg
     tg.y = matrixportal.display.height//2 - 6
     for i in range(-40, matrixportal.display.width+40):
         tg.x=i; wfeed(); time.sleep(_plane_speed_delay)
-    matrixportal.display.show(g)
+    matrixportal.display.root_group = g
     gc.collect()
 
 def make_runway_bmp(width, side='left'):
@@ -1729,14 +1730,14 @@ def plane_animation_take_off():
     spd.x=1; spd.y=4
     pg = displayio.Group()
     pg.append(rw_tg); pg.append(ptg); pg.append(spd)
-    matrixportal.display.show(pg)
+    matrixportal.display.root_group = pg
     steps = matrixportal.display.width+24
     for i in range(steps):
         ptg.x=-40+i
         ptg.y=8-(i*10//steps)
         wfeed(); time.sleep(_plane_speed_delay)
         if ptg.x>matrixportal.display.width or ptg.y<-20: break
-    matrixportal.display.show(g)
+    matrixportal.display.root_group = g
     gc.collect()
 
 def plane_animation_landing():
@@ -1748,7 +1749,7 @@ def plane_animation_landing():
     spd.x=1; spd.y=4
     pg = displayio.Group()
     pg.append(rw_tg); pg.append(ltg); pg.append(spd)
-    matrixportal.display.show(pg)
+    matrixportal.display.root_group = pg
     # Nose-first: enter upper-right, descend steeply to runway level lower-left
     steps = matrixportal.display.width + 40
     for i in range(steps):
@@ -1758,7 +1759,7 @@ def plane_animation_landing():
         ltg.y = -16 + (i * 28 // steps)
         wfeed(); time.sleep(_plane_speed_delay)
         if ltg.x < -40 or ltg.y > 14: break
-    matrixportal.display.show(g)
+    matrixportal.display.root_group = g
     gc.collect()
 
 # ---- Labels ----
@@ -1771,7 +1772,7 @@ label3.x=1; label3.y=27
 
 g = displayio.Group()
 g.append(label1); g.append(label2); g.append(label3)
-matrixportal.display.show(g)
+matrixportal.display.root_group = g
 
 label1_short=label1_long=label2_short=label2_long=label3_short=label3_long=''
 
@@ -1805,7 +1806,7 @@ def flap_all(t1, t2, t3):
     label1.text=t1; label2.text=t2; label3.text=t3
 
 def display_flight():
-    matrixportal.display.show(g)
+    matrixportal.display.root_group = g
     label1.x=1; label2.x=1; label3.x=1
     # All three rows flap in simultaneously
     flap_all(label1_short, label2_short, label3_short)
@@ -1942,10 +1943,10 @@ def show_weather():
                 text=("SET "+sset_str if show_sunset else "Up "+rise_str))
             wl3.x=1; wl3.y=26
             wg.append(wl1); wg.append(wl2); wg.append(wl3)
-            matrixportal.display.show(wg)
+            matrixportal.display.root_group = wg
             print("Weather: "+str(temp)+"C "+cond)
             for _ in range(20): wfeed(); time.sleep(0.5)
-            matrixportal.display.show(g)
+            matrixportal.display.root_group = g
     except Exception as e:
         print("Weather error:", e)
     gc.collect()
@@ -2110,7 +2111,7 @@ def display_score(goal):
     score_on  = sh+hs+"-"+aws+sa
     score_off = sh+" "*len(hs)+"-"+" "*len(aws)+sa
     is_home = scoring_team.lower()==home.lower()
-    matrixportal.display.show(g)
+    matrixportal.display.root_group = g
     label1.color=0xFFCC00; label1.x=1; label1.text=comp
     label2.color=0xFFFFFF; label2.x=1; label2.text=score_on
     label3.color=0x00FF00; label3.x=1
@@ -2124,7 +2125,7 @@ def display_score(goal):
 
 def show_live_scores(matches):
     if not matches: return
-    matrixportal.display.show(g)
+    matrixportal.display.root_group = g
     for m in matches[:4]:
         home=(m.get("homeTeam",{}).get("shortName") or m.get("homeTeam",{}).get("name","?"))
         away=(m.get("awayTeam",{}).get("shortName") or m.get("awayTeam",{}).get("name","?"))
@@ -2193,7 +2194,7 @@ def cricket_hold(secs=6):
         wfeed(); time.sleep(0.5)
 
 def show_cricket_screen(l1c,l1t, l2c,l2t, l3c,l3t, secs=5):
-    matrixportal.display.show(g)
+    matrixportal.display.root_group = g
     label1.color=l1c; label1.x=1; label1.text=l1t[:10]
     label2.color=l2c; label2.x=1; label2.text=l2t[:10]
     label3.color=l3c; label3.x=1; label3.text=l3t[:10]
@@ -2254,7 +2255,7 @@ def display_cricket_wicket(summary, scorecard, prev_wkts):
         except:
             pass
 
-    matrixportal.display.show(g)
+    matrixportal.display.root_group = g
     # Flash WICKET
     for _ in range(4):
         label1.color=0xFF0000; label1.text="WICKET!"; label1.x=1
