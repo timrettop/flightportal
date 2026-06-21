@@ -2472,6 +2472,113 @@ def get_flights(url, headers):
     except Exception as e:
         print("Flight error:", e); return [], {}
 
+def show_approach_queue(flights, raw):
+    if not flights:
+        return
+
+    matrixportal.display.root_group = g
+
+    planes = []
+    for i, (fid, o, d, dist, alt) in enumerate(flights[:5]):
+        fi = raw.get(fid)
+        if not fi:
+            continue
+        callsign = fi[13] or fi[16] or fid
+        aircraft = fi[8] or '?'
+        planes.append((i+1, callsign, aircraft, o, round(dist,1), alt))
+
+    if not planes:
+        return
+
+    ROW_COLOURS = [
+        0xFFFFFF, 0xFFFF00, 0xFF6600, 0xFF00FF, 0x00AAFF,
+        0xFF9999, 0x00FFAA, 0xAA00FF,
+    ]
+
+    BAR_Y = 31
+    bar_bmp = displayio.Bitmap(64, 1, 2)
+    bar_pal = displayio.Palette(2)
+    bar_pal[0] = 0x000000
+    bar_pal[1] = 0x222222
+    bar_tg = displayio.TileGrid(bar_bmp, pixel_shader=bar_pal, x=0, y=BAR_Y)
+    g.append(bar_tg)
+
+    total_ticks = QUERY_DELAY * 2
+    tick = 0
+    PLANE_HOLD = 4.0
+
+    try:
+        while True:
+            for idx, (pos, callsign, aircraft, o, dist, alt) in enumerate(planes):
+                colour = ROW_COLOURS[idx % len(ROW_COLOURS)]
+                label1.color = colour
+                label2.color = colour
+                label3.color = colour
+                label1.text = "#"+str(pos)+" "+callsign[:7]
+                label1.x = 1
+                label2.text = aircraft+" "+str(dist)+"km"
+                label2.x = 1
+                label3.text = o+"->"+HOME_AIRPORT+" "+str(alt)+"ft"
+                label3.x = 1
+
+                plane_start = time.monotonic()
+                scroll_done = False
+
+                while True:
+                    now = time.monotonic()
+                    elapsed = now - plane_start
+
+                    if elapsed >= 1.5 and not scroll_done:
+                        scroll_done = True
+                        text_width2 = label2.bounding_box[2]
+                        text_width3 = label3.bounding_box[2]
+                        needs_scroll2 = text_width2 > matrixportal.display.width
+                        needs_scroll3 = text_width3 > matrixportal.display.width
+
+                        if needs_scroll2 or needs_scroll3:
+                            scroll_end_x2 = -(text_width2 - matrixportal.display.width) - 2 if needs_scroll2 else 1
+                            scroll_end_x3 = -(text_width3 - matrixportal.display.width) - 2 if needs_scroll3 else 1
+                            sx2 = 1; sx3 = 1
+                            scroll_start = time.monotonic()
+
+                            while sx2 > scroll_end_x2 or sx3 > scroll_end_x3:
+                                if sx2 > scroll_end_x2:
+                                    sx2 -= 1
+                                    label2.x = sx2
+                                if sx3 > scroll_end_x3:
+                                    sx3 -= 1
+                                    label3.x = sx3
+                                se = time.monotonic() - scroll_start
+                                current_tick = min(tick + se / 0.5, total_ticks)
+                                pixels_remaining = max(0, min(64, 64 - int((current_tick / total_ticks) * 64)))
+                                for x in range(64):
+                                    bar_bmp[x, 0] = 1 if x < pixels_remaining else 0
+                                wfeed()
+                                time.sleep(TEXT_SPEED)
+
+                            se = time.monotonic() - scroll_start
+                            tick += int(se / 0.5)
+                            tick = min(tick, total_ticks)
+
+                    pixels_remaining = max(0, min(64, 64 - int((tick / total_ticks) * 64)))
+                    for x in range(64):
+                        bar_bmp[x, 0] = 1 if x < pixels_remaining else 0
+                    wfeed()
+                    time.sleep(0.5)
+                    tick += 1
+                    if tick >= total_ticks:
+                        return
+                    if time.monotonic() - plane_start >= PLANE_HOLD:
+                        break
+    finally:
+        g.remove(bar_tg)
+        label1.text = ""
+        label2.text = ""
+        label3.text = ""
+        label1.color = ROW_ONE_COLOUR
+        label2.color = ROW_TWO_COLOUR
+        label3.color = ROW_THREE_COLOUR
+
 # ---- Main loop ----
 last_flight=''; sports_cycle=0
 SPORTS_EVERY=2
@@ -2503,17 +2610,7 @@ while True:
     if ENABLE_FLIGHTS:
         flights,raw = get_flights(FLIGHT_URL, rheaders)
         if flights:
-            for fid, origin, dest, dist, alt in flights:
-                if fid!=last_flight:
-                    print("New flight "+fid)
-                    clear_flight(); last_flight=fid; gc.collect()
-                    fi=raw.get(fid)
-                    if fi:
-                        set_labels_from_feed(fi)
-                        if origin==HOME_AIRPORT: plane_animation_take_off()
-                        elif dest==HOME_AIRPORT: plane_animation_landing()
-                        else: plane_animation()
-                        display_flight()
+            show_approach_queue(flights, raw)
         elif ENABLE_WEATHER:
             show_weather()
     elif ENABLE_WEATHER:
