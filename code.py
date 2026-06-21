@@ -24,6 +24,8 @@ except ImportError:
 
 QUERY_DELAY    = 30
 BOUNDS_BOX     = secrets["bounds_box"]
+MY_LAT         = secrets.get("my_lat", 0.0000)
+MY_LON         = secrets.get("my_lon", 0.0000)
 
 # Feature flags
 ENABLE_FLIGHTS  = secrets.get("enable_flights",  True)
@@ -43,7 +45,7 @@ FLAP_SPEED       = 0.03
 FLAP_CHARS       = ' ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-.'
 
 # URLs
-FLIGHT_URL  = "https://data-cloud.flightradar24.com/zones/fcgi/feed.js?bounds=" + BOUNDS_BOX + "&faa=1&satellite=1&mlat=1&flarm=1&adsb=1&gnd=0&air=1&vehicles=0&estimated=0&maxage=14400&gliders=0&stats=0&ems=1&limit=1"
+FLIGHT_URL  = "https://data-cloud.flightradar24.com/zones/fcgi/feed.js?bounds=" + BOUNDS_BOX + "&faa=1&satellite=1&mlat=1&flarm=1&adsb=1&gnd=0&air=1&vehicles=0&estimated=0&maxage=14400&gliders=0&stats=0&ems=1&limit=40"
 WEATHER_URL = "https://api.open-meteo.com/v1/forecast?latitude=47.3769&longitude=8.5417&current_weather=true&daily=sunrise,sunset&timezone=Europe%2FZurich&forecast_days=1"
 FOOTBALL_BASE  = "https://api.football-data.org/v4/competitions/"
 ESPN_BASE      = "https://site.api.espn.com/apis/site/v2/sports/soccer/"
@@ -2438,25 +2440,37 @@ def process_cricket():
     label1.color = ROW_ONE_COLOUR
     label2.color = ROW_TWO_COLOUR
     label3.color = ROW_THREE_COLOUR
+
+def distance_km(lat, lon):
+    dlat = (lat - MY_LAT) * 111.0
+    dlon = (lon - MY_LON) * 111.0 * math.cos(MY_LAT * 3.14159 / 180)
+    return math.sqrt(dlat*dlat + dlon*dlon)
+
 def get_flights(url, headers):
-    print("Starting get_flights function")
     try:
         resp = requests_session.get(url, headers=headers)
-        if resp.status_code==200:
-            data = resp.json(); print(data)
-            flights=[]; raw={}
-            for fid,fi in data.items():
-                if fid not in ("version","full_count") and len(fi)>13:
-                    o=fi[11]; d=fi[12]
-                    if o and d:
-                        flights.append((fid,o,d)); raw[fid]=fi
-                    else:
-                        print("Skip "+fid)
-            return flights,raw
+        if resp.status_code == 200:
+            data = resp.json()
+            flights = []; raw = {}
+            for fid, fi in data.items():
+                if fid not in ("version", "full_count") and len(fi) > 13:
+                    o = fi[11]; d = fi[12]
+                    alt     = fi[4] if len(fi) > 4 else 99999
+                    heading = fi[3] if len(fi) > 3 else 0
+                    lat     = fi[1] if len(fi) > 1 else 0
+                    lon     = fi[2] if len(fi) > 2 else 0
+                    on_approach = (240 <= heading <= 300) and alt <= 7000
+                    east_of_you = lon > MY_LON
+                    if on_approach and east_of_you:
+                        dist = distance_km(lat, lon)
+                        flights.append((fid, o, d, dist, alt))
+                        raw[fid] = fi
+            flights.sort(key=lambda x: x[3])
+            return flights, raw
         print("Flight API error:", resp.status_code)
-        return [],{}
+        return [], {}
     except Exception as e:
-        print("Flight error:", e); return [],{}
+        print("Flight error:", e); return [], {}
 
 # ---- Main loop ----
 last_flight=''; sports_cycle=0
@@ -2489,7 +2503,7 @@ while True:
     if ENABLE_FLIGHTS:
         flights,raw = get_flights(FLIGHT_URL, rheaders)
         if flights:
-            for fid,origin,dest in flights:
+            for fid, origin, dest, dist, alt in flights:
                 if fid!=last_flight:
                     print("New flight "+fid)
                     clear_flight(); last_flight=fid; gc.collect()
