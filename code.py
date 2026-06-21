@@ -22,12 +22,13 @@ try:
 except ImportError:
     raise
 
-QUERY_DELAY    = 30
-BOUNDS_BOX     = secrets["bounds_box"]
-MY_LAT         = secrets.get("my_lat", 0.0000)
-MY_LON         = secrets.get("my_lon", 0.0000)
-TEMP_UNIT      = secrets.get("temp_unit", "F")
-MY_TIMEZONE    = secrets.get("timezone", "UTC")
+QUERY_DELAY        = 30
+BOUNDS_BOX         = secrets["bounds_box"]
+MY_LAT             = secrets.get("my_lat", 0.0000)
+MY_LON             = secrets.get("my_lon", 0.0000)
+TEMP_UNIT          = secrets.get("temp_unit", "F")
+MY_TIMEZONE        = secrets.get("timezone", "UTC")
+SHOW_FULL_AIRCRAFT = secrets.get("show_full_aircraft", False)
 
 # Feature flags
 ENABLE_FLIGHTS  = secrets.get("enable_flights",  True)
@@ -2056,7 +2057,7 @@ def show_weather():
             wl3.x=1; wl3.y=26
             wg.append(wl1); wg.append(wl2); wg.append(wl3)
             matrixportal.display.root_group = wg
-            print("Weather: "+str(temp)+"C "+cond)
+            print("Weather: "+str(temp)+TEMP_UNIT+" "+cond)
             for _ in range(12): wfeed(); time.sleep(0.5)
             matrixportal.display.root_group = g
     except Exception as e:
@@ -2572,10 +2573,24 @@ def get_flights(url, headers):
                     on_approach = (240 <= heading <= 300) and alt <= 7000
                     east_of_you = lon > MY_LON
                     if on_approach and east_of_you:
+                        callsign = fi[13] or fi[16] or fid
+                        aircraft = fi[8] or '?'
                         dist = distance_km(lat, lon)
                         flights.append((fid, o, d, dist, alt))
                         raw[fid] = fi
+                        print(f"  MATCH {callsign} ({aircraft}) {o}->{d} alt:{alt}ft hdg:{heading} dist:{round(dist,1)}km")
+                    else:
+                        print(f"  skip {fid} alt:{alt} hdg:{heading} east:{east_of_you}")
             flights.sort(key=lambda x: x[3])
+            if flights:
+                print(f"--- {len(flights)} on approach, closest first ---")
+                for i,(fid,o,d,dist,alt) in enumerate(flights):
+                    fi = raw[fid]
+                    callsign = fi[13] or fi[16] or fid
+                    aircraft = fi[8] or '?'
+                    print(f"  #{i+1} {callsign} ({aircraft}) {o}->{d} {round(dist,1)}km {alt}ft")
+            else:
+                print("  no matches")
             return flights, raw
         print("Flight API error:", resp.status_code)
         return [], {}
@@ -2595,7 +2610,8 @@ def show_approach_queue(flights, raw):
             continue
         callsign = fi[13] or fi[16] or fid
         aircraft = fi[8] or '?'
-        planes.append((i+1, callsign, aircraft, o, round(dist,1), alt))
+        aircraft_full = AIRCRAFT_NAMES.get(aircraft, aircraft) if SHOW_FULL_AIRCRAFT else aircraft
+        planes.append((i+1, callsign, aircraft, aircraft_full, o, round(dist,1), alt))
 
     if not planes:
         return
@@ -2619,7 +2635,7 @@ def show_approach_queue(flights, raw):
 
     try:
         while True:
-            for idx, (pos, callsign, aircraft, o, dist, alt) in enumerate(planes):
+            for idx, (pos, callsign, aircraft, aircraft_full, o, dist, alt) in enumerate(planes):
                 colour = ROW_COLOURS[idx % len(ROW_COLOURS)]
                 label1.color = colour
                 label2.color = colour
@@ -2645,7 +2661,11 @@ def show_approach_queue(flights, raw):
                         needs_scroll2 = text_width2 > matrixportal.display.width
                         needs_scroll3 = text_width3 > matrixportal.display.width
 
-                        if needs_scroll2 or needs_scroll3:
+                        if needs_scroll2 or needs_scroll3 or SHOW_FULL_AIRCRAFT:
+                            if SHOW_FULL_AIRCRAFT:
+                                label2.text = aircraft_full+" "+str(dist)+"km"
+                                text_width2 = label2.bounding_box[2]
+                                needs_scroll2 = text_width2 > matrixportal.display.width
                             scroll_end_x2 = -(text_width2 - matrixportal.display.width) - 2 if needs_scroll2 else 1
                             scroll_end_x3 = -(text_width3 - matrixportal.display.width) - 2 if needs_scroll3 else 1
                             sx2 = 1; sx3 = 1
@@ -2721,12 +2741,12 @@ while True:
         flights,raw = get_flights(FLIGHT_URL, rheaders)
         if flights:
             show_approach_queue(flights, raw)
+            if ENABLE_WEATHER:
+                show_weather()
         elif ENABLE_WEATHER:
             show_weather()
     elif ENABLE_WEATHER:
         show_weather()
 
-    time.sleep(5)
-    for _ in range(0,QUERY_DELAY,5):
-        time.sleep(5); wfeed()
     gc.collect()
+    time.sleep(0.5)
