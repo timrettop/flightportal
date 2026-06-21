@@ -38,9 +38,9 @@ HOME_AIRPORT   = secrets["home_airport"]
 FOOTBALL_KEY   = secrets.get("football_key", "")
 
 # Colours
-ROW_ONE_COLOUR   = 0xEE82EE
-ROW_TWO_COLOUR   = 0x4B0082
-ROW_THREE_COLOUR = 0xFFA500
+ROW_ONE_COLOUR   = 0xFFFFFF
+ROW_TWO_COLOUR   = 0xFFFFFF
+ROW_THREE_COLOUR = 0xFFFFFF
 PLANE_COLOUR     = 0x4B0082
 TEXT_SPEED       = 0.04
 FLAP_SPEED       = 0.03
@@ -2517,7 +2517,7 @@ def show_approach_queue(flights, raw):
     bar_bmp = displayio.Bitmap(64, 1, 2)
     bar_pal = displayio.Palette(2)
     bar_pal[0] = 0x000000
-    bar_pal[1] = 0x222222
+    bar_pal[1] = 0x004400
     bar_tg = displayio.TileGrid(bar_bmp, pixel_shader=bar_pal, x=0, y=BAR_Y)
     g.append(bar_tg)
 
