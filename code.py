@@ -26,6 +26,8 @@ QUERY_DELAY    = 30
 BOUNDS_BOX     = secrets["bounds_box"]
 MY_LAT         = secrets.get("my_lat", 0.0000)
 MY_LON         = secrets.get("my_lon", 0.0000)
+TEMP_UNIT      = secrets.get("temp_unit", "F")
+MY_TIMEZONE    = secrets.get("timezone", "UTC")
 
 # Feature flags
 ENABLE_FLIGHTS  = secrets.get("enable_flights",  True)
@@ -46,7 +48,16 @@ FLAP_CHARS       = ' ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-.'
 
 # URLs
 FLIGHT_URL  = "https://data-cloud.flightradar24.com/zones/fcgi/feed.js?bounds=" + BOUNDS_BOX + "&faa=1&satellite=1&mlat=1&flarm=1&adsb=1&gnd=0&air=1&vehicles=0&estimated=0&maxage=14400&gliders=0&stats=0&ems=1&limit=40"
-WEATHER_URL = "https://api.open-meteo.com/v1/forecast?latitude=47.3769&longitude=8.5417&current_weather=true&daily=sunrise,sunset&timezone=Europe%2FZurich&forecast_days=1"
+WEATHER_URL = (
+    "https://api.open-meteo.com/v1/forecast"
+    "?latitude="+str(MY_LAT)
+    +"&longitude="+str(MY_LON)
+    +"&current_weather=true"
+    +"&daily=sunrise,sunset"
+    +"&timezone="+MY_TIMEZONE.replace("/", "%2F")
+    +"&forecast_days=1"
+    +("&temperature_unit=fahrenheit" if TEMP_UNIT == "F" else "")
+)
 FOOTBALL_BASE  = "https://api.football-data.org/v4/competitions/"
 ESPN_BASE      = "https://site.api.espn.com/apis/site/v2/sports/soccer/"
 SOFASCORE_LIVE = "https://api.sofascore.com/api/v1/sport/football/events/live"
@@ -1889,11 +1900,18 @@ def set_labels_from_feed(flight_info):
 
 # ---- Weather ----
 def temp_colour(temp):
-    if temp<=0: return 0x0044FF
-    if temp<=10: return 0x00CCFF
-    if temp<=20: return 0x00FF88
-    if temp<=28: return 0xFFCC00
-    return 0xFF2200
+    if TEMP_UNIT == "F":
+        if temp <= 32: return 0x0044FF
+        if temp <= 50: return 0x00CCFF
+        if temp <= 68: return 0x00FF88
+        if temp <= 82: return 0xFFCC00
+        return 0xFF2200
+    else:
+        if temp <= 0: return 0x0044FF
+        if temp <= 10: return 0x00CCFF
+        if temp <= 20: return 0x00FF88
+        if temp <= 28: return 0xFFCC00
+        return 0xFF2200
 
 def is_daytime(sunrise_str, sunset_str, current_time_str):
     """Compare HH:MM strings"""
@@ -1937,7 +1955,7 @@ def show_weather():
             sset_str = sunset.split('T')[-1][:5]  if sunset  else ""
 
             wg = displayio.Group()
-            wl1 = adafruit_display_text.label.Label(FONT,color=temp_colour(temp),text=f"ZRH {temp}C")
+            wl1 = adafruit_display_text.label.Label(FONT, color=temp_colour(temp), text=HOME_AIRPORT+" "+str(temp)+TEMP_UNIT)
             wl1.x=1; wl1.y=4
             wl2 = adafruit_display_text.label.Label(FONT,color=0xFFFFFF,text=cond[:10])
             wl2.x=1; wl2.y=15
@@ -1947,7 +1965,7 @@ def show_weather():
             wg.append(wl1); wg.append(wl2); wg.append(wl3)
             matrixportal.display.root_group = wg
             print("Weather: "+str(temp)+"C "+cond)
-            for _ in range(20): wfeed(); time.sleep(0.5)
+            for _ in range(12): wfeed(); time.sleep(0.5)
             matrixportal.display.root_group = g
     except Exception as e:
         print("Weather error:", e)
