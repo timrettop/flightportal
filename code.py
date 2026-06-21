@@ -2064,6 +2064,62 @@ def show_weather():
         print("Weather error:", e)
     gc.collect()
 
+def show_weather_persistent(duration=20):
+    try:
+        resp = requests_session.get(WEATHER_URL)
+        if resp.status_code != 200:
+            time.sleep(duration)
+            return
+        data = resp.json()
+        cw   = data["current_weather"]
+        temp = int(cw["temperature"])
+        code = int(cw["weathercode"])
+        ctime = cw.get("time","")
+        cond = WEATHER_CODES.get(code,'Unknown')
+
+        daily = data.get("daily",{})
+        sunrise = daily.get("sunrise",[""])[0]
+        sunset  = daily.get("sunset",[""])[0]
+        try:
+            cur_mins = int(ctime.split('T')[-1][:2])*60 + int(ctime.split('T')[-1][3:5])
+            show_sunset = cur_mins >= 720
+        except:
+            show_sunset = True
+        rise_str = sunrise.split('T')[-1][:5] if sunrise else ""
+        sset_str = sunset.split('T')[-1][:5]  if sunset  else ""
+
+        wg = displayio.Group()
+        wl1 = adafruit_display_text.label.Label(FONT, color=temp_colour(temp), text=HOME_AIRPORT+" "+str(temp)+TEMP_UNIT)
+        wl1.x=1; wl1.y=4
+        wl2 = adafruit_display_text.label.Label(FONT, color=0xFFFFFF, text=cond[:10])
+        wl2.x=1; wl2.y=15
+        wl3 = adafruit_display_text.label.Label(FONT, color=0xFFAA00,
+            text=("SET "+sset_str if show_sunset else "Up "+rise_str))
+        wl3.x=1; wl3.y=26
+        scan_bmp = displayio.Bitmap(64, 1, 2)
+        scan_pal = displayio.Palette(2)
+        scan_pal[0] = 0x000000
+        scan_pal[1] = 0x004400
+        scan_tg = displayio.TileGrid(scan_bmp, pixel_shader=scan_pal, x=0, y=31)
+        wg.append(wl1); wg.append(wl2); wg.append(wl3); wg.append(scan_tg)
+        matrixportal.display.root_group = wg
+        print("Weather (persistent): "+str(temp)+TEMP_UNIT+" "+cond)
+
+        start = time.monotonic()
+        while time.monotonic() - start < duration:
+            elapsed = time.monotonic() - start
+            pos = int((elapsed % 5.0) / 5.0 * 64)
+            for x in range(64):
+                scan_bmp[x, 0] = 1 if pos <= x < pos + 4 else 0
+            wfeed()
+            time.sleep(0.05)
+    except Exception as e:
+        print("Weather persistent error:", e)
+    finally:
+        matrixportal.display.root_group = g
+    gc.collect()
+
+
 # ---- Football ----
 _last_scores = {}
 _goal_queue  = []
@@ -2253,7 +2309,7 @@ def show_live_scores(matches):
     label1.color=ROW_ONE_COLOUR; label2.color=ROW_TWO_COLOUR; label3.color=ROW_THREE_COLOUR
     clear_flight()
 
-# ---- Flights ----
+
 # Cricket state tracking
 _cricket_last    = {}
 _cricket_match_id   = None
@@ -2744,9 +2800,9 @@ while True:
             if ENABLE_WEATHER:
                 show_weather()
         elif ENABLE_WEATHER:
-            show_weather()
+            show_weather_persistent()
     elif ENABLE_WEATHER:
-        show_weather()
+        show_weather_persistent()
 
     gc.collect()
     time.sleep(0.5)
