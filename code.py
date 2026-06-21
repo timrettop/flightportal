@@ -1290,22 +1290,114 @@ AIRPORT_INFO = {
 }
 
 AIRCRAFT_NAMES = {
+    # Airbus Narrow
     'A318':'Airbus A318','A319':'Airbus A319','A320':'Airbus A320',
     'A321':'Airbus A321','A20N':'Airbus A320neo','A21N':'Airbus A321neo',
-    'A332':'Airbus A330','A333':'Airbus A330','A359':'Airbus A350-900',
-    'A35K':'Airbus A350-1000','A388':'Airbus A380',
-    'B737':'Boeing 737','B738':'Boeing 737-800','B38M':'Boeing 737 MAX',
-    'B744':'Boeing 747-400','B748':'Boeing 747-8',
-    'B77W':'Boeing 777-300ER','B772':'Boeing 777-200',
-    'B788':'Boeing 787-8','B789':'Boeing 787-9','B78X':'Boeing 787-10',
-    'E170':'Embraer 170','E175':'Embraer 175',
-    'E190':'Embraer 190','E195':'Embraer 195',
+    'A19N':'Airbus A319neo','A223':'Airbus A220-300','A225':'Airbus A220',
+    # Airbus Wide
+    'A306':'Airbus A300','A310':'Airbus A310',
+    'A332':'Airbus A330-200','A333':'Airbus A330-300',
+    'A338':'Airbus A330-800neo','A339':'Airbus A330-900neo',
+    'A342':'Airbus A340-200','A343':'Airbus A340-300',
+    'A345':'Airbus A340-500','A346':'Airbus A340-600',
+    'A359':'Airbus A350-900','A35K':'Airbus A350-1000','A388':'Airbus A380',
+    # Airbus A220
     'BCS1':'Airbus A220-100','BCS3':'Airbus A220-300',
-    'C172':'Cessna 172','C182':'Cessna 182','C208':'Cessna Caravan',
-    'PC12':'Pilatus PC-12','E55P':'Embraer Phenom',
-    'C525':'Citation CJ','C56X':'Citation XLS',
+    # Boeing Narrow
+    'B732':'Boeing 737-200','B733':'Boeing 737-300',
+    'B734':'Boeing 737-400','B735':'Boeing 737-500',
+    'B736':'Boeing 737-600','B737':'Boeing 737-700',
+    'B738':'Boeing 737-800','B739':'Boeing 737-900',
+    'B37M':'Boeing 737 MAX 7','B38M':'Boeing 737 MAX 8',
+    'B39M':'Boeing 737 MAX 9','B3XM':'Boeing 737 MAX 10',
+    # Boeing Wide
+    'B741':'Boeing 747-100','B742':'Boeing 747-200',
+    'B743':'Boeing 747-300','B744':'Boeing 747-400',
+    'B748':'Boeing 747-8','B74S':'Boeing 747SP',
+    'B752':'Boeing 757-200','B753':'Boeing 757-300',
+    'B762':'Boeing 767-200','B763':'Boeing 767-300',
+    'B764':'Boeing 767-400','B772':'Boeing 777-200',
+    'B77L':'Boeing 777-200LR','B77W':'Boeing 777-300ER',
+    'B778':'Boeing 777X-8','B779':'Boeing 777X-9',
+    'B788':'Boeing 787-8','B789':'Boeing 787-9','B78X':'Boeing 787-10',
+    # Embraer Jets
+    'E135':'Embraer ERJ-135','E145':'Embraer ERJ-145',
+    'E170':'Embraer 170','E175':'Embraer 175',
+    'E17S':'Embraer E175 E2','E190':'Embraer 190',
+    'E195':'Embraer 195','E290':'Embraer E190 E2',
+    'E295':'Embraer E195 E2',
+    'E75L':'Embraer E175 L','E75S':'Embraer E175 S',
+    # Bombardier CRJ
+    'CRJ1':'CRJ-100','CRJ2':'CRJ-200',
+    'CRJ7':'CRJ-700','CRJ9':'CRJ-900','CRJX':'CRJ-1000',
+    # Bombardier Dash 8
+    'DH8A':'Dash 8-100','DH8B':'Dash 8-200',
+    'DH8C':'Dash 8-300','DH8D':'Dash 8 Q400',
+    # ATR
+    'AT43':'ATR 42-300','AT45':'ATR 42-500',
+    'AT72':'ATR 72-200','AT73':'ATR 72-300',
+    'AT75':'ATR 72-500','AT76':'ATR 72-600',
+    # McDonnell Douglas
+    'MD11':'MD-11','MD81':'MD-81','MD82':'MD-82',
+    'MD83':'MD-83','MD87':'MD-87','MD88':'MD-88',
+    'MD90':'MD-90','DC10':'DC-10','DC93':'DC-9-30',
+    # Cessna
+    'C172':'Cessna 172','C182':'Cessna 182',
+    'C208':'Cessna Caravan','C210':'Cessna 210',
+    'C310':'Cessna 310','C340':'Cessna 340',
+    'C402':'Cessna 402','C404':'Cessna 404',
+    'C414':'Cessna 414','C421':'Cessna 421',
+    # Citation
+    'C500':'Citation I','C501':'Citation I SP',
+    'C510':'Citation Mustang','C525':'Citation CJ',
+    'C526':'Citation CJ1+','C527':'Citation CJ2',
+    'C550':'Citation II','C551':'Citation II SP',
+    'C56X':'Citation XLS','C560':'Citation V',
+    'C650':'Citation III','C680':'Citation Sovereign',
+    'C68A':'Citation Sovereign+','C700':'Citation Longitude',
+    'C750':'Citation X',
+    # Piper
+    'PA18':'Piper Cub','PA24':'Piper Comanche',
+    'PA28':'Piper Cherokee','PA32':'Piper Cherokee Six',
+    'PA34':'Piper Seneca','PA44':'Piper Seminole',
+    'PA46':'Piper Malibu','PA60':'Piper Aerostar',
+    # Other GA
+    'SR20':'Cirrus SR20','SR22':'Cirrus SR22',
+    'DA40':'Diamond DA40','DA42':'Diamond DA42',
+    'DA62':'Diamond DA62',
+    'TBM7':'TBM 700','TBM8':'TBM 850','TBM9':'TBM 900',
+    'PC12':'Pilatus PC-12','PC24':'Pilatus PC-24',
+    'BE20':'King Air 200','BE30':'King Air 300',
+    'BE35':'Bonanza','BE36':'Bonanza A36',
+    'BE58':'Baron 58','BE9L':'King Air 90',
+    'SF34':'Saab 340',
+    # Bombardier Business Jets
+    'CL30':'Challenger 300','CL35':'Challenger 350',
+    'CL60':'Challenger 600','CL64':'Challenger 604',
+    'CL65':'Challenger 605','CL75':'Challenger 650',
     'GL5T':'Gulfstream G500','GLEX':'Global Express',
-    'DH8D':'Dash 8 Q400','AT76':'ATR 72-600',
+    'GLF4':'Gulfstream G-IV','GLF5':'Gulfstream G-V',
+    'GLF6':'Gulfstream G650',
+    'GL7T':'Global 7500',
+    # Gulfstream
+    'G150':'Gulfstream G150','G280':'Gulfstream G280',
+    'GALX':'Gulfstream Galaxy',
+    # Dassault
+    'F2TH':'Falcon 2000','F900':'Falcon 900',
+    'F9EX':'Falcon 900EX','FA50':'Falcon 50',
+    'FA7X':'Falcon 7X','FA8X':'Falcon 8X',
+    # Embraer Business Jets
+    'E50P':'Phenom 100','E55P':'Phenom 300',
+    'E545':'Legacy 450','E550':'Legacy 500',
+    # Learjet
+    'LJ25':'Learjet 25','LJ35':'Learjet 35',
+    'LJ40':'Learjet 40','LJ45':'Learjet 45',
+    'LJ55':'Learjet 55','LJ60':'Learjet 60',
+    'LJ70':'Learjet 70','LJ75':'Learjet 75',
+    # Other Business Jets
+    'H25B':'BAe 125-800','H25C':'BAe 125-1000',
+    'HDJT':'HondaJet','PRM1':'Beechcraft Premier',
+    'P180':'Piaggio Avanti',
 }
 
 def lookup_airline_hex(hex_code, requests_session):
