@@ -12,11 +12,8 @@ secrets = {
     'timezone':           'UTC', # e.g. 'Europe/Zurich'
     'show_full_aircraft': False,
     'show_helicopters':   False,
-    'football_key':       '',
 
     # Feature flags - set to False to disable
     'enable_flights':     True,
     'enable_weather':     True,
-    'enable_football':    True,
-    'enable_cricket':     True,
 }
