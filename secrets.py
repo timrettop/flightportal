@@ -8,6 +8,7 @@ secrets = {
     'temp_unit':          'F',  # 'F' or 'C'
     'timezone':           'UTC', # e.g. 'Europe/Zurich'
     'show_full_aircraft': False,
+    'show_helicopters':   False,
     'football_key':       '',
 
     # Feature flags - set to False to disable

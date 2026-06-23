@@ -29,13 +29,14 @@ MY_LON             = secrets.get("my_lon", 0.0000)
 TEMP_UNIT          = secrets.get("temp_unit", "F")
 MY_TIMEZONE        = secrets.get("timezone", "UTC")
 SHOW_FULL_AIRCRAFT = secrets.get("show_full_aircraft", False)
+SHOW_HELICOPTERS   = secrets.get("show_helicopters", False)
+HOME_AIRPORT       = secrets["home_airport"]
 
 # Feature flags
 ENABLE_FLIGHTS  = secrets.get("enable_flights",  True)
 ENABLE_WEATHER  = secrets.get("enable_weather",  True)
 ENABLE_FOOTBALL = secrets.get("enable_football", True)
 ENABLE_CRICKET  = secrets.get("enable_cricket",  True)
-HOME_AIRPORT   = secrets["home_airport"]
 FOOTBALL_KEY   = secrets.get("football_key", "")
 
 # Colours
@@ -1401,6 +1402,19 @@ AIRCRAFT_NAMES = {
     'P180':'Piaggio Avanti',
 }
 
+HELI_TYPES = {
+    'EC30','EC35','EC45','EC55','EC75','EC20','EC25',
+    'AS32','AS35','AS50','AS55','AS65',
+    'BO10','BO50',
+    'S076','S092','S76','S92',
+    'R44','R66',
+    'H1','H47','H60','H64','H72',
+    'A109','A119','A139','A169','A189',
+    'B06','B07','B47','B21','B06',
+    'MD52','MD60','MD90',
+    'MH65','MH60',
+}
+
 def lookup_airline_hex(hex_code, requests_session):
     """Look up airline/operator from ICAO hex code via hexdb.io"""
     try:
@@ -2631,6 +2645,9 @@ def get_flights(url, headers):
                     if on_approach and east_of_you:
                         callsign = fi[13] or fi[16] or fid
                         aircraft = fi[8] or '?'
+                        if not SHOW_HELICOPTERS and aircraft.upper() in HELI_TYPES:
+                            print(f"  heli skip {callsign} ({aircraft})")
+                            continue
                         dist = distance_km(lat, lon)
                         flights.append((fid, o, d, dist, alt))
                         raw[fid] = fi
