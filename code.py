@@ -2625,10 +2625,12 @@ def process_cricket():
     label2.color = ROW_TWO_COLOUR
     label3.color = ROW_THREE_COLOUR
 
+
 def distance_km(lat, lon):
     dlat = (lat - MY_LAT) * 111.0
     dlon = (lon - MY_LON) * 111.0 * math.cos(MY_LAT * 3.14159 / 180)
     return math.sqrt(dlat*dlat + dlon*dlon)
+
 
 def position_check(lat, lon):
     if not FILTER_DIRECTION:
@@ -2638,6 +2640,7 @@ def position_check(lat, lon):
     if 135 <= mid < 225:  return lat > MY_LAT   # southbound, north of you
     if 225 <= mid < 315:  return lon > MY_LON   # westbound, east of you
     return lat < MY_LAT                          # northbound, south of you
+
 
 def get_flights(url, headers):
     try:
@@ -2667,7 +2670,7 @@ def get_flights(url, headers):
                         print(f"  skip {fid} alt:{alt} hdg:{heading}")
             flights.sort(key=lambda x: x[3])
             if flights:
-                print(f"--- {len(flights)} on approach, closest first ---")
+                print(f"--- {len(flights)} matched, closest first ---")
                 for i,(fid,o,d,dist,alt) in enumerate(flights):
                     fi = raw[fid]
                     callsign = fi[13] or fi[16] or fid
@@ -2680,6 +2683,7 @@ def get_flights(url, headers):
         return [], {}
     except Exception as e:
         print("Flight error:", e); return [], {}
+
 
 def show_flight_queue(flights, raw):
     if not flights:
