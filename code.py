@@ -1406,16 +1406,16 @@ AIRCRAFT_NAMES = {
 }
 
 HELI_TYPES = {
-    'EC30','EC35','EC45','EC55','EC75','EC20','EC25',
-    'AS32','AS35','AS50','AS55','AS65',
-    'BO10','BO50',
-    'S076','S092','S76','S92',
-    'R44','R66',
-    'H1','H47','H60','H64','H72',
-    'A109','A119','A139','A169','A189',
-    'B06','B07','B47','B21','B06',
-    'MD52','MD60','MD90',
-    'MH65','MH60',
+    'EC30','EC35','EC45','EC55','EC75','EC20','EC25', # Eurocopter/Airbus Helicopters
+    'AS32','AS35','AS50','AS55','AS65', # AgustaWestland/Leonardo
+    'BO10','BO50','B429', # Bell
+    'S076','S092','S76','S92', # Sikorsky
+    'R44','R66', # Robinson
+    'H1','H47','H60','H64','H72', # Boeing Vertol/McDonnell Douglas
+    'A109','A119','A139','A169','A189', # AgustaWestland/Leonardo
+    'B06','B07','B47','B21','B06', # Boeing Vertol/McDonnell Douglas
+    'MD52','MD60','MD90', # McDonnell Douglas
+    'MH65','MH60', # US Coast Guard Helicopters
 }
 
 def lookup_airline_hex(hex_code, requests_session):
