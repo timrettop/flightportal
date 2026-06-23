@@ -1,8 +1,8 @@
 # FlightPortal
 
-A live flight, weather, football and cricket tracker for a 64×32 RGB LED matrix, built on the Adafruit MatrixPortal S3.
+A slimmed down flight and weather tracker for a 64×32 RGB LED matrix, built on the Adafruit MatrixPortal S3.
 
-> Credit to [smartbutnot](https://github.com/smartbutnot/) for the original project this is based on.
+> Credit to [smartbutnot](https://github.com/smartbutnot/) for the original project this is based on and [solomonreal](https://github.com/solomonreal) for the port to S3. 
 
 ![FlightPortal](https://user-images.githubusercontent.com/103124527/208709167-dd4b6ff2-4c80-4e38-840f-e5b958e2ed78.jpg)
 
@@ -11,26 +11,13 @@ A live flight, weather, football and cricket tracker for a 64×32 RGB LED matrix
 ## What it does
 
 ### Flights
-Polls FlightRadar24 every 30 seconds for aircraft overhead. When a flight is detected it plays a plane animation — takeoff climbs lower-left to upper-right, landing descends upper-right to lower-left nose-first, overflying aircraft cross left to right. The plane graphic is 40×20px with two-tone livery colours per airline (Swiss Air gets a white cross on the tail). Speed in knots is shown during the animation, followed by a flap-in animation and scrolling text showing callsign, route and aircraft type.
+Polls FlightRadar24 every 30 seconds for aircraft overhead. When one or more flights are detected it displays a list of aircraft that meet the defined filters. This version is designed for viewpoints on a landing/takeoff flight path.  Ordering is based on distance from 'MY_LON and MY_LAT'. Optional filters available.  
 
 Missing flight data is enriched automatically via adsb.lol, OpenSky, hexdb.io and planespotters.net (good for private jets and charter operators). The static lookup covers 1,235 airports and 40+ airlines.
 
 ### Weather
 Shown between flights. Displays temperature in a colour that shifts from blue (freezing) through cyan, green and yellow to red (hot), alongside condition text and wind speed. Shows sunrise time before midday and sunset time after.
 
-### Football
-Sofascore is used as the primary source (no API key needed), with football-data.org as a fallback. Matches are filtered so only relevant games appear:
-
-- **Always:** Premier League, Champions League, Europa League, Conference League, World Cup, Euros, Nations League, FA Cup, EFL Cup, any West Ham, England or FC Aarau game
-- **Semi-finals and finals only:** Serie A, La Liga, Ligue 1, Bundesliga, Swiss Super League
-
-Goal alerts show the scorer's name flashing on screen. Live scores are shown during the sports cycle.
-
-### Cricket
-Uses the ESPN Cricinfo unofficial API — no key needed. Automatically discovers live England matches and reports:
-- Wickets with dismissal details (bowler, fielder, runs scored)
-- End of innings with top 3 batting and bowling figures
-- Match result
 
 ---
 

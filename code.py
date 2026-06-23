@@ -24,13 +24,16 @@ except ImportError:
 
 QUERY_DELAY        = 30
 BOUNDS_BOX         = secrets["bounds_box"]
+HOME_AIRPORT       = secrets["home_airport"]
 MY_LAT             = secrets.get("my_lat", 0.0000)
 MY_LON             = secrets.get("my_lon", 0.0000)
+FILTER_DIRECTION   = secrets.get("filter_direction", False)
+HEADING_MIN        = secrets.get("heading_min", 240)
+HEADING_MAX        = secrets.get("heading_max", 300)
 TEMP_UNIT          = secrets.get("temp_unit", "F")
 MY_TIMEZONE        = secrets.get("timezone", "UTC")
 SHOW_FULL_AIRCRAFT = secrets.get("show_full_aircraft", False)
 SHOW_HELICOPTERS   = secrets.get("show_helicopters", False)
-HOME_AIRPORT       = secrets["home_airport"]
 
 # Feature flags
 ENABLE_FLIGHTS  = secrets.get("enable_flights",  True)
@@ -2627,6 +2630,15 @@ def distance_km(lat, lon):
     dlon = (lon - MY_LON) * 111.0 * math.cos(MY_LAT * 3.14159 / 180)
     return math.sqrt(dlat*dlat + dlon*dlon)
 
+def position_check(lat, lon):
+    if not FILTER_DIRECTION:
+        return True
+    mid = (HEADING_MIN + HEADING_MAX) / 2
+    if 45 <= mid < 135:   return lon < MY_LON   # eastbound, west of you
+    if 135 <= mid < 225:  return lat > MY_LAT   # southbound, north of you
+    if 225 <= mid < 315:  return lon > MY_LON   # westbound, east of you
+    return lat < MY_LAT                          # northbound, south of you
+
 def get_flights(url, headers):
     try:
         resp = requests_session.get(url, headers=headers)
@@ -2640,9 +2652,8 @@ def get_flights(url, headers):
                     heading = fi[3] if len(fi) > 3 else 0
                     lat     = fi[1] if len(fi) > 1 else 0
                     lon     = fi[2] if len(fi) > 2 else 0
-                    on_approach = (240 <= heading <= 300) and alt <= 7000
-                    east_of_you = lon > MY_LON
-                    if on_approach and east_of_you:
+                    heading_match = (not FILTER_DIRECTION or (HEADING_MIN <= heading <= HEADING_MAX)) and alt <= 7000
+                    if heading_match and position_check(lat, lon):
                         callsign = fi[13] or fi[16] or fid
                         aircraft = fi[8] or '?'
                         if not SHOW_HELICOPTERS and aircraft.upper() in HELI_TYPES:
@@ -2653,7 +2664,7 @@ def get_flights(url, headers):
                         raw[fid] = fi
                         print(f"  MATCH {callsign} ({aircraft}) {o}->{d} alt:{alt}ft hdg:{heading} dist:{round(dist,1)}km")
                     else:
-                        print(f"  skip {fid} alt:{alt} hdg:{heading} east:{east_of_you}")
+                        print(f"  skip {fid} alt:{alt} hdg:{heading}")
             flights.sort(key=lambda x: x[3])
             if flights:
                 print(f"--- {len(flights)} on approach, closest first ---")
@@ -2670,7 +2681,7 @@ def get_flights(url, headers):
     except Exception as e:
         print("Flight error:", e); return [], {}
 
-def show_approach_queue(flights, raw):
+def show_flight_queue(flights, raw):
     if not flights:
         return
 
@@ -2813,7 +2824,7 @@ while True:
     if ENABLE_FLIGHTS:
         flights,raw = get_flights(FLIGHT_URL, rheaders)
         if flights:
-            show_approach_queue(flights, raw)
+            show_flight_queue(flights, raw)
             if ENABLE_WEATHER:
                 show_weather()
         elif ENABLE_WEATHER:
