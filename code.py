@@ -1320,13 +1320,11 @@ def show_weather_persistent(duration=20):
             elapsed = time.monotonic() - start
             pos = int((elapsed % 5.0) / 5.0 * 64)
             for x in range(64):
-                scan_bmp[x, 0] = 1 if pos <= x < pos + 4 else 0
+                scan_bmp[x, 0] = 1 if pos <= x < pos + 8 else 0
             wfeed()
             time.sleep(0.05)
     except Exception as e:
         print("Weather persistent error:", e)
-    finally:
-        matrixportal.display.root_group = g
     gc.collect()
 
 
