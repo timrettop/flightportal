@@ -22,22 +22,35 @@ try:
 except ImportError:
     raise
 
+try:
+    from config import config
+except ImportError:
+    raise
+
 QUERY_DELAY        = 30
-BOUNDS_BOX         = secrets["bounds_box"]
-HOME_AIRPORT       = secrets["home_airport"]
+BOUNDS_BOX         = config.get("bounds_box", "")
+RADIUS_NM          = config.get("radius_nm", 25)
+HOME_AIRPORT       = config.get("home_airport", "")
 MY_LAT             = secrets.get("my_lat", 0.0000)
 MY_LON             = secrets.get("my_lon", 0.0000)
-FILTER_DIRECTION   = secrets.get("filter_direction", False)
-HEADING_MIN        = secrets.get("heading_min", 240)
-HEADING_MAX        = secrets.get("heading_max", 300)
-TEMP_UNIT          = secrets.get("temp_unit", "F")
-MY_TIMEZONE        = secrets.get("timezone", "UTC")
-SHOW_FULL_AIRCRAFT = secrets.get("show_full_aircraft", False)
-SHOW_HELICOPTERS   = secrets.get("show_helicopters", False)
+FILTER_DESTINATION = config.get("filter_destination", False)
+FILTER_ORIGIN      = config.get("filter_origin", False)
+FILTER_ARRIVALS    = config.get("filter_arrivals", False)
+FILTER_DEPARTURES  = config.get("filter_departures", False)
+FILTER_ALTITUDE    = config.get("filter_altitude", False)
+MIN_ALTITUDE       = config.get("min_altitude", 0)
+MAX_ALTITUDE       = config.get("max_altitude", 10000)
+FILTER_DIRECTION   = config.get("filter_direction", False)
+HEADING_MIN        = config.get("heading_min", 240)
+HEADING_MAX        = config.get("heading_max", 300)
+TEMP_UNIT          = config.get("temp_unit", "F")
+MY_TIMEZONE        = config.get("timezone", "UTC")
+SHOW_FULL_AIRCRAFT = config.get("show_full_aircraft", False)
+SHOW_HELICOPTERS   = config.get("show_helicopters", False)
 
 # Feature flags
-ENABLE_FLIGHTS  = secrets.get("enable_flights",  True)
-ENABLE_WEATHER  = secrets.get("enable_weather",  True)
+ENABLE_FLIGHTS  = config.get("enable_flights",  True)
+ENABLE_WEATHER  = config.get("enable_weather",  True)
 
 
 # Colours
@@ -51,6 +64,7 @@ FLAP_CHARS       = ' ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-.'
 
 # URLs
 FLIGHT_URL  = "https://data-cloud.flightradar24.com/zones/fcgi/feed.js?bounds=" + BOUNDS_BOX + "&faa=1&satellite=1&mlat=1&flarm=1&adsb=1&gnd=0&air=1&vehicles=0&estimated=0&maxage=14400&gliders=0&stats=0&ems=1&limit=40"
+ADSB_RADIUS_URL = f"https://api.adsb.lol/v2/lat/{MY_LAT}/lon/{MY_LON}/dist/{RADIUS_NM}/"
 WEATHER_URL = (
     "https://api.open-meteo.com/v1/forecast"
     "?latitude="+str(MY_LAT)
@@ -1369,7 +1383,7 @@ def get_flights(url, headers):
                         raw[fid] = fi
                         print(f"  MATCH {callsign} ({aircraft}) {o}->{d} alt:{alt}ft hdg:{heading} dist:{round(dist,1)}km")
                     else:
-                        print(f"  skip {fid} alt:{alt} hdg:{heading}")
+                        print(f"  skip {fid} alt:{alt} hdg:{heading} {o}->{d}")
             flights.sort(key=lambda x: x[3])
             if flights:
                 print(f"--- {len(flights)} matched, closest first ---")
@@ -1387,6 +1401,88 @@ def get_flights(url, headers):
         print("Flight error:", e); return [], {}
 
 
+def get_flights_adsb(url, headers):
+    try:
+        resp = requests_session.get(url, headers=headers)
+        if resp.status_code == 200:
+            data = resp.json()
+            flights = []; raw = {}
+            for ac in data.get("ac", []):
+                if ac.get("alt_baro") == "ground":
+                    continue
+                alt     = ac.get("alt_baro") or 0
+                heading = ac.get("track") or ac.get("true_heading") or 0
+                lat     = ac.get("lat") or 0
+                lon     = ac.get("lon") or 0
+                o       = ac.get("orig","") or ""
+                d       = ac.get("dest","") or ""
+                fid     = ac.get("hex","")
+                callsign = (ac.get("flight","") or "").strip() or fid
+                aircraft = ac.get("t","") or "?"
+
+                # Destination Filter
+                if FILTER_DESTINATION and d:
+                    dest_match = d.upper() == HOME_AIRPORT.upper()
+                else:
+                    dest_match = None
+
+                # Origin Filter
+                if FILTER_ORIGIN and o:
+                    origin_match = o.upper() == HOME_AIRPORT.upper()
+                else:
+                    origin_match = None
+
+                # Altitude Filter
+                if FILTER_ALTITUDE:
+                    altitude_match = MIN_ALTITUDE <= alt <= MAX_ALTITUDE
+                else:
+                    altitude_match = True
+
+                # Heading / Position Filter
+                heading_match = (not FILTER_DIRECTION or (HEADING_MIN <= heading <= HEADING_MAX))
+                pos_match = position_check(lat, lon)
+                
+                # Decide whether to include
+                if dest_match is True:
+                    include = not FILTER_ARRIVALS and altitude_match
+                elif dest_match is False and origin_match is True:
+                    include = not FILTER_DEPARTURES and altitude_match
+                elif dest_match is False:
+                    include = False
+                elif origin_match is True:
+                    include = not FILTER_DEPARTURES and altitude_match
+                elif origin_match is False:
+                    include = not FILTER_ARRIVALS and heading_match and pos_match and altitude_match
+                else:
+                    include = (not FILTER_ARRIVALS or not FILTER_DEPARTURES) and heading_match and pos_match and altitude_match
+
+                if include:
+                    if not SHOW_HELICOPTERS and aircraft.upper() in HELI_TYPES:
+                        print(f"  heli skip {callsign} ({aircraft})")
+                        continue
+                    dist = distance_km(lat, lon)
+                    flights.append((fid, o, d, dist, alt))
+                    raw[fid] = ac
+                    print(f"  MATCH {callsign} ({aircraft}) {o}->{d} alt:{alt}ft hdg:{heading} dist:{round(dist,1)}km")
+                else:
+                    print(f"  skip {fid} alt:{alt} hdg:{heading} {o}->{d}")
+            flights.sort(key=lambda x: x[3])
+            if flights:
+                print(f"--- {len(flights)} matched, closest first ---")
+                for i,(fid,o,d,dist,alt) in enumerate(flights):
+                    ac = raw[fid]
+                    callsign = (ac.get("flight","") or "").strip() or fid
+                    aircraft = ac.get("t","") or "?"
+                    print(f"  #{i+1} {callsign} ({aircraft}) {o}->{d} {round(dist,1)}km {alt}ft")
+            else:
+                print("  no matches")
+            return flights, raw
+        print("ADSB API error:", resp.status_code)
+        return [], {}
+    except Exception as e:
+        print("ADSB error:", e); return [], {}
+    
+
 def show_flight_queue(flights, raw):
     if not flights:
         return
@@ -1398,8 +1494,10 @@ def show_flight_queue(flights, raw):
         fi = raw.get(fid)
         if not fi:
             continue
-        callsign = fi[13] or fi[16] or fid
-        aircraft = fi[8] or '?'
+        callsign = (fi.get("flight","") or "").strip() or fid
+        aircraft = fi.get("t","") or "?"
+        # callsign = fi[13] or fi[16] or fid
+        # aircraft = fi[8] or '?'
         aircraft_full = AIRCRAFT_NAMES.get(aircraft, aircraft) if SHOW_FULL_AIRCRAFT else aircraft
         planes.append((i+1, callsign, aircraft, aircraft_full, o, round(dist,1), alt))
 
@@ -1508,7 +1606,8 @@ while True:
     print("memory free: "+str(gc.mem_free()))
 
     if ENABLE_FLIGHTS:
-        flights,raw = get_flights(FLIGHT_URL, rheaders)
+        flights, raw = get_flights_adsb(ADSB_RADIUS_URL, rheaders)
+        # flights,raw = get_flights(FLIGHT_URL, rheaders)
         if flights:
             show_flight_queue(flights, raw)
             if ENABLE_WEATHER:
