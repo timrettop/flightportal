@@ -672,7 +672,7 @@ HELI_TYPES = {
     'H1','H47','H60','H64','H72', # Boeing Vertol/McDonnell Douglas
     'A109','A119','A139','A169','A189', # AgustaWestland/Leonardo
     'B06','B07','B47','B21','B06', # Boeing Vertol/McDonnell Douglas
-    'MD52','MD60','MD90', # McDonnell Douglas
+    'MD52','MD60', # McDonnell Douglas
     'MH65','MH60', # US Coast Guard Helicopters
 }
 
