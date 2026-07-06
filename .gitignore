@@ -1,0 +1,9 @@
+.vscode/
+testing/
+
+# Real credentials / location — commit the .example templates instead
+settings.toml
+secrets.py
+
+# CircuitPython auto-generated
+boot_out.txt
