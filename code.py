@@ -22,23 +22,27 @@ try:
 except ImportError:
     raise
 
+try:
+    from config import config
+except ImportError:
+    raise
+
 QUERY_DELAY        = 30
-BOUNDS_BOX         = secrets["bounds_box"]
-HOME_AIRPORT       = secrets["home_airport"]
+BOUNDS_BOX         = config.get("bounds_box", "")
+HOME_AIRPORT       = config.get("home_airport", "")
 MY_LAT             = secrets.get("my_lat", 0.0000)
 MY_LON             = secrets.get("my_lon", 0.0000)
-FILTER_DIRECTION   = secrets.get("filter_direction", False)
-HEADING_MIN        = secrets.get("heading_min", 240)
-HEADING_MAX        = secrets.get("heading_max", 300)
-TEMP_UNIT          = secrets.get("temp_unit", "F")
-MY_TIMEZONE        = secrets.get("timezone", "UTC")
-SHOW_FULL_AIRCRAFT = secrets.get("show_full_aircraft", False)
-SHOW_HELICOPTERS   = secrets.get("show_helicopters", False)
+FILTER_DIRECTION   = config.get("filter_direction", False)
+HEADING_MIN        = config.get("heading_min", 240)
+HEADING_MAX        = config.get("heading_max", 300)
+TEMP_UNIT          = config.get("temp_unit", "F")
+MY_TIMEZONE        = config.get("timezone", "UTC")
+SHOW_FULL_AIRCRAFT = config.get("show_full_aircraft", False)
+SHOW_HELICOPTERS   = config.get("show_helicopters", False)
 
 # Feature flags
-ENABLE_FLIGHTS  = secrets.get("enable_flights",  True)
-ENABLE_WEATHER  = secrets.get("enable_weather",  True)
-
+ENABLE_FLIGHTS  = config.get("enable_flights",  True)
+ENABLE_WEATHER  = config.get("enable_weather",  True)
 
 # Colours
 ROW_ONE_COLOUR   = 0xFFFFFF
