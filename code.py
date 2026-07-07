@@ -6,6 +6,7 @@ from adafruit_matrixportal.matrixportal import MatrixPortal
 from microcontroller import watchdog as w
 from watchdog import WatchDogMode
 import wifi, socketpool, ssl, adafruit_requests
+from flightlogic import classify_flight, queue_mode, resolve_route, passes_direction_filter
 
 # Watchdog disabled - WatchDogMode.RESET not supported on ESP32-S3 in CP9+
 #w.timeout = 60
@@ -35,6 +36,10 @@ MY_LON             = secrets.get("my_lon", 0.0000)
 FILTER_DIRECTION   = config.get("filter_direction", False)
 HEADING_MIN        = config.get("heading_min", 240)
 HEADING_MAX        = config.get("heading_max", 300)
+SHOW_ARRIVALS     = config.get("show_arrivals", True)
+SHOW_DEPARTURES   = config.get("show_departures", True)
+ARRIVAL_HEADING   = config.get("arrival_heading", (HEADING_MIN + HEADING_MAX) / 2)
+HEADING_TOLERANCE = config.get("heading_tolerance", 50)
 TEMP_UNIT          = config.get("temp_unit", "F")
 MY_TIMEZONE        = config.get("timezone", "UTC")
 SHOW_FULL_AIRCRAFT = config.get("show_full_aircraft", False)
@@ -1391,9 +1396,10 @@ def get_flights(url, headers):
         print("Flight error:", e); return [], {}
 
 
-def show_flight_queue(flights, raw):
+def show_flight_queue(flights, raw, classes=None):
     if not flights:
         return
+    classes = classes or {}
 
     matrixportal.display.root_group = g
 
@@ -1405,7 +1411,10 @@ def show_flight_queue(flights, raw):
         callsign = fi[13] or fi[16] or fid
         aircraft = fi[8] or '?'
         aircraft_full = AIRCRAFT_NAMES.get(aircraft, aircraft) if SHOW_FULL_AIRCRAFT else aircraft
-        planes.append((i+1, callsign, aircraft, aircraft_full, o, round(dist,1), alt))
+        cls = classes.get(fid, "unknown")
+        o2, d2 = resolve_route(o, d, cls, HOME_AIRPORT)
+        route = (o2 or "?") + "->" + (d2 or "?")
+        planes.append((i+1, callsign, aircraft, aircraft_full, route, round(dist,1), alt))
 
     if not planes:
         return
@@ -1427,9 +1436,10 @@ def show_flight_queue(flights, raw):
     tick = 0
     PLANE_HOLD = 4.0
 
+    # Display each plane in turn, with a progress bar and scrolling text if needed
     try:
         while True:
-            for idx, (pos, callsign, aircraft, aircraft_full, o, dist, alt) in enumerate(planes):
+            for idx, (pos, callsign, aircraft, aircraft_full, route, dist, alt) in enumerate(planes):
                 colour = ROW_COLOURS[idx % len(ROW_COLOURS)]
                 label1.color = colour
                 label2.color = colour
@@ -1438,7 +1448,7 @@ def show_flight_queue(flights, raw):
                 label1.x = 1
                 label2.text = aircraft+" "+str(dist)+"km"
                 label2.x = 1
-                label3.text = o+"->"+HOME_AIRPORT+" "+str(alt)+"ft"
+                label3.text = route+" "+str(alt)+"ft"
                 label3.x = 1
 
                 plane_start = time.monotonic()
@@ -1503,8 +1513,8 @@ def show_flight_queue(flights, raw):
         label2.color = ROW_TWO_COLOUR
         label3.color = ROW_THREE_COLOUR
 
-# ---- Main loop ----
 last_flight=''
+last_mode=None
 
 while True:
     checkConnection()
@@ -1513,12 +1523,38 @@ while True:
 
     if ENABLE_FLIGHTS:
         flights,raw = get_flights(FLIGHT_URL, rheaders)
+
+        # Classify each flight, then apply the arrival/departure toggles
+        classes = {}
+        kept = []
+        for f in flights:
+            fid = f[0]; fi = raw[fid]
+            cls = classify_flight(fi[11], fi[12], fi[3], HOME_AIRPORT,
+                                  ARRIVAL_HEADING, HEADING_TOLERANCE)
+            if not passes_direction_filter(cls, SHOW_ARRIVALS, SHOW_DEPARTURES):
+                continue
+            classes[fid] = cls
+            kept.append(f)
+        flights = kept
+
         if flights:
-            show_flight_queue(flights, raw)
+            mode = queue_mode([classes[f[0]] for f in flights])
+            # Runway intro once per homogeneous corridor, and only when the
+            # mode changes so a steady stream doesn't replay it every cycle.
+            if mode != last_mode:
+                if mode == "arrivals":
+                    plane_animation_landing()
+                elif mode == "departures":
+                    plane_animation_take_off()
+            last_mode = mode
+
+            show_flight_queue(flights, raw, classes)
             if ENABLE_WEATHER:
                 show_weather()
-        elif ENABLE_WEATHER:
-            show_weather_persistent()
+        else:
+            last_mode = None
+            if ENABLE_WEATHER:
+                show_weather_persistent()
     elif ENABLE_WEATHER:
         show_weather_persistent()
 
