@@ -6,7 +6,7 @@ from adafruit_matrixportal.matrixportal import MatrixPortal
 from microcontroller import watchdog as w
 from watchdog import WatchDogMode
 import wifi, socketpool, ssl, adafruit_requests
-from flightlogic import classify_flight, queue_mode, resolve_route, passes_direction_filter
+from flightlogic import classify_flight, queue_mode, resolve_route, passes_direction_filter, parse_fr24_row
 
 # Watchdog disabled - WatchDogMode.RESET not supported on ESP32-S3 in CP9+
 #w.timeout = 60
@@ -28,6 +28,10 @@ try:
 except ImportError:
     raise
 
+DEMO_MODE = config.get("demo_mode", False)
+if DEMO_MODE:
+    from demo_feed import get_flights_demo
+
 QUERY_DELAY        = 30
 BOUNDS_BOX         = config.get("bounds_box", "")
 HOME_AIRPORT       = config.get("home_airport", "")
@@ -36,6 +40,8 @@ MY_LON             = secrets.get("my_lon", 0.0000)
 FILTER_DIRECTION   = config.get("filter_direction", False)
 HEADING_MIN        = config.get("heading_min", 240)
 HEADING_MAX        = config.get("heading_max", 300)
+MIN_ALTITUDE      = config.get("min_altitude", 0)
+MAX_ALTITUDE      = config.get("max_altitude", 7000)
 SHOW_ARRIVALS     = config.get("show_arrivals", True)
 SHOW_DEPARTURES   = config.get("show_departures", True)
 ARRIVAL_HEADING   = config.get("arrival_heading", (HEADING_MIN + HEADING_MAX) / 2)
@@ -1361,15 +1367,17 @@ def get_flights(url, headers):
             flights = []; raw = {}
             for fid, fi in data.items():
                 if fid not in ("version", "full_count") and len(fi) > 13:
-                    o = fi[11]; d = fi[12]
-                    alt     = fi[4] if len(fi) > 4 else 99999
-                    heading = fi[3] if len(fi) > 3 else 0
-                    lat     = fi[1] if len(fi) > 1 else 0
-                    lon     = fi[2] if len(fi) > 2 else 0
-                    heading_match = (not FILTER_DIRECTION or (HEADING_MIN <= heading <= HEADING_MAX)) and alt <= 7000
-                    if heading_match and position_check(lat, lon):
-                        callsign = fi[13] or fi[16] or fid
-                        aircraft = fi[8] or '?'
+                    p = parse_fr24_row(fid, fi)
+                    o = p["origin"]; d = p["dest"]
+                    alt     = p["alt"]
+                    heading = p["heading"]
+                    lat     = p["lat"]
+                    lon     = p["lon"]
+                    heading_match = (not FILTER_DIRECTION or (HEADING_MIN <= heading <= HEADING_MAX))
+                    alt_match = MIN_ALTITUDE <= alt <= MAX_ALTITUDE
+                    if heading_match and alt_match and position_check(lat, lon):
+                        callsign = p["callsign"]
+                        aircraft = p["aircraft"]
                         if not SHOW_HELICOPTERS and aircraft.upper() in HELI_TYPES:
                             print(f"  heli skip {callsign} ({aircraft})")
                             continue
@@ -1522,7 +1530,7 @@ while True:
     print("memory free: "+str(gc.mem_free()))
 
     if ENABLE_FLIGHTS:
-        flights,raw = get_flights(FLIGHT_URL, rheaders)
+        flights,raw = get_flights_demo(FLIGHT_URL, rheaders) if DEMO_MODE else get_flights(FLIGHT_URL, rheaders) # type: ignore 
 
         # Classify each flight, then apply the arrival/departure toggles
         classes = {}

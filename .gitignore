@@ -1,5 +1,13 @@
-.vscode/
-testing/
+# Python things
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+
+# don't ignore all of .vscode — we want to share settings.json
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
 
 # Real credentials / location — commit the .example templates instead
 settings.toml

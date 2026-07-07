@@ -101,3 +101,28 @@ def passes_direction_filter(cls, show_arrivals, show_departures):
     if cls == "departure":
         return show_departures
     return True
+
+
+def parse_fr24_row(fid, fi):
+    """Extract the fields FlightPortal uses from one FlightRadar24 feed row.
+
+    The feed encodes each aircraft as a positional list; this function is the
+    single definition of which index means what, shared by code.py's
+    get_flights() and the tests. `fid` is the feed key, used as the last
+    callsign fallback. Missing indices fall back to safe defaults so a short
+    or malformed row can't raise.
+    """
+    def at(i, default=None):
+        return fi[i] if len(fi) > i else default
+
+    return {
+        "id": fid,
+        "lat": at(1, 0),
+        "lon": at(2, 0),
+        "heading": at(3, 0),
+        "alt": at(4, 99999),
+        "aircraft": at(8) or "?",
+        "origin": at(11) or "",
+        "dest": at(12) or "",
+        "callsign": at(13) or at(16) or fid,
+    }
