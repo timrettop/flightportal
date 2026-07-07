@@ -65,7 +65,7 @@ FLAP_SPEED       = 0.03
 FLAP_CHARS       = ' ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-.'
 
 # URLs
-FLIGHT_URL  = "https://data-cloud.flightradar24.com/zones/fcgi/feed.js?bounds=" + BOUNDS_BOX + "&faa=1&satellite=1&mlat=1&flarm=1&adsb=1&gnd=0&air=1&vehicles=0&estimated=0&maxage=14400&gliders=0&stats=0&ems=1&limit=40"
+FLIGHT_URL  = "https://data-cloud.flightradar24.com/zones/fcgi/feed.js?bounds=" + BOUNDS_BOX + "&faa=1&satellite=1&mlat=1&flarm=1&adsb=1&gnd=0&air=1&vehicles=0&estimated=0&maxage=14400&gliders=0&stats=0&ems=1&limit=60"
 WEATHER_URL = (
     "https://api.open-meteo.com/v1/forecast"
     "?latitude="+str(MY_LAT)
