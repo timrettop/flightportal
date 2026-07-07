@@ -126,3 +126,4 @@ def parse_fr24_row(fid, fi):
         "dest": at(12) or "",
         "callsign": at(13) or at(16) or fid,
     }
+

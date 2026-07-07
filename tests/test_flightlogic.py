@@ -7,11 +7,6 @@ Run from the repo root:
 The plain tests need only pytest. The property-based tests at the bottom
 need hypothesis; they're skipped automatically if it isn't installed.
 """
-import os
-import sys
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
 import pytest
 from flightlogic import (
     angular_diff,

@@ -62,3 +62,4 @@ def get_flights_demo(url, headers):
         alt = 4000         # cosmetic here; demo bypasses the real altitude filter
         flights.append((fid, o, d, dist, alt))
     return flights, raw
+
