@@ -2,7 +2,7 @@
 
 A slimmed down flight and weather tracker for a 64×32 RGB LED matrix, built on the Adafruit MatrixPortal S3.
 
-> Credit to [smartbutnot](https://github.com/smartbutnot/) for the original project this is based on and [solomonreal](https://github.com/solomonreal) for the port to S3. 
+> Credit to [smartbutnot](https://github.com/smartbutnot/) for the original project this is based on and [solomonreal](https://github.com/solomonreal) for the port to S3.
 
 ![FlightPortal](https://user-images.githubusercontent.com/103124527/208709167-dd4b6ff2-4c80-4e38-840f-e5b958e2ed78.jpg)
 
@@ -11,13 +11,14 @@ A slimmed down flight and weather tracker for a 64×32 RGB LED matrix, built on 
 ## What it does
 
 ### Flights
+
 Polls FlightRadar24 every 30 seconds for aircraft overhead. When one or more flights are detected it displays a list of aircraft that meet the defined filters. This version is designed for viewpoints on a landing/takeoff flight path.  Ordering is based on distance from 'MY_LON and MY_LAT'. Optional filters available.  
 
 Missing flight data is enriched automatically via adsb.lol, OpenSky, hexdb.io and planespotters.net (good for private jets and charter operators). The static lookup covers 1,235 airports and 40+ airlines.
 
 ### Weather
-Shown between flights. Displays temperature in a colour that shifts from blue (freezing) through cyan, green and yellow to red (hot), alongside condition text and wind speed. Shows sunrise time before midday and sunset time after.
 
+Shown between flights. Displays temperature in a colour that shifts from blue (freezing) through cyan, green and yellow to red (hot), alongside condition text and wind speed. Shows sunrise time before midday and sunset time after.
 
 ---
 
@@ -49,8 +50,6 @@ secrets = {
     # Feature flags
     'enable_flights':  True,
     'enable_weather':  True,
-    'enable_football': True,
-    'enable_cricket':  True,
 }
 ```
 
@@ -60,7 +59,7 @@ The `bounds_box` is `north,south,west,east` in decimal degrees. Adjust it to the
 
 All included in the standard MatrixPortal prep. For reference:
 
-```
+```text
 neopixel.mpy
 adafruit_requests.mpy
 adafruit_portalbase
@@ -90,7 +89,7 @@ Use the cable supplied with the matrix panel. Connect it to the portal's power p
 All free, no key required unless noted:
 
 | Source | Used for |
-|---|---|
+| --- | --- |
 | FlightRadar24 feed | Live flight positions |
 | adsb.lol | Flight enrichment |
 | OpenSky | Callsign / country |
