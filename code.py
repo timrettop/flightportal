@@ -19,7 +19,7 @@ def wfeed():
 FONT = terminalio.FONT
 
 try:
-    from secrets import secrets
+    from secrets import secrets # type: ignore
 except ImportError:
     raise
 
@@ -1060,7 +1060,7 @@ def plane_animation_take_off():
     spd = adafruit_display_text.label.Label(FONT, color=0xAAAAAA, text=str(_plane_speed_knots)+"kt")
     spd.x=1; spd.y=4
     pg = displayio.Group()
-    pg.append(rw_tg); pg.append(ptg); pg.append(spd)
+    pg.append(rw_tg); pg.append(ptg); # pg.append(spd)
     matrixportal.display.root_group = pg
     steps = matrixportal.display.width+24
     for i in range(steps):
@@ -1079,7 +1079,7 @@ def plane_animation_landing():
     spd = adafruit_display_text.label.Label(FONT, color=0xAAAAAA, text=str(_plane_speed_knots)+"kt")
     spd.x=1; spd.y=4
     pg = displayio.Group()
-    pg.append(rw_tg); pg.append(ltg); pg.append(spd)
+    pg.append(rw_tg); pg.append(ltg); # pg.append(spd)
     matrixportal.display.root_group = pg
     # Nose-first: enter upper-right, descend steeply to runway level lower-left
     steps = matrixportal.display.width + 40
@@ -1527,7 +1527,7 @@ last_mode=None
 while True:
     checkConnection()
     wfeed()
-    print("memory free: "+str(gc.mem_free()))
+    print("memory free: "+str(gc.mem_free())) # type: ignore
 
     if ENABLE_FLIGHTS:
         flights,raw = get_flights_demo(FLIGHT_URL, rheaders) if DEMO_MODE else get_flights(FLIGHT_URL, rheaders) # type: ignore 

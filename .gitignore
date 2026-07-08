@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .venv/
+.hypothesis/
 
 # don't ignore all of .vscode — we want to share settings.json
 .vscode/*
