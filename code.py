@@ -618,6 +618,7 @@ AIRCRAFT_NAMES = {
     # Cessna
     'C172':'Cessna 172','C182':'Cessna 182',
     'C208':'Cessna Caravan','C210':'Cessna 210',
+    'C25A':'Cessna Citation CJ1','C25B':'Cessna Citation CJ2',
     'C310':'Cessna 310','C340':'Cessna 340',
     'C402':'Cessna 402','C404':'Cessna 404',
     'C414':'Cessna 414','C421':'Cessna 421',
@@ -1141,7 +1142,7 @@ def display_flight():
     label1.x=1; label2.x=1; label3.x=1
     # All three rows flap in simultaneously
     flap_all(label1_short, label2_short, label3_short)
-    time.sleep(1)
+    time.sleep(1.5)
     # Then scroll each long version in sequence
     label1.text=label1_long; scroll(label1,1); label1.text=label1_short; label1.x=1
     time.sleep(0.5)
