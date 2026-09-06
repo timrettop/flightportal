@@ -75,7 +75,7 @@ class Doorbell:
         """
         try:
             if self._ensure_connected():
-                self.client.loop(timeout=0.1)
+                self.client.loop(timeout=1)
         except Exception as e:  # noqa: BLE001
             self.log("ota: doorbell loop failed: %r" % e)
             try:

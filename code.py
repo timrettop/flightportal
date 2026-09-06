@@ -28,7 +28,10 @@ def _aio_configured():
 
 def _show_updating():
     matrixportal.display.root_group = g
-    flap_all("UPDATING", "", "")
+    flap_all("", "Updating", "")
+
+def _clear_message():
+    flap_all("", "", "")
 
 
 bell = None
@@ -1606,10 +1609,10 @@ while True:
         _confirm_at = None
 
     if bell:
-        bell.poll(session)   # cheap when nothing is due; on_checking shows the message if a check runs
+        bell.poll(session)   # cheap when nothing is due; on_checking/on_no_update handle the message
     elif time.monotonic() > _next_ota:
         _next_ota = time.monotonic() + 3600
         _show_updating()
         applied = updater.check_and_apply(session)
         if not applied:
-            flap_all("", "", "")
+            _clear_message()
