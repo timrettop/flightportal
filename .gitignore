@@ -16,3 +16,8 @@ secrets.py
 
 # CircuitPython auto-generated
 boot_out.txt
+
+# Auto-Updates
+.staging
+ota-private.pem
+dist/
