@@ -7,6 +7,7 @@ from microcontroller import watchdog as w
 from watchdog import WatchDogMode
 import wifi, socketpool, ssl, adafruit_requests
 from ota import state, updater
+from ota.doorbell import Doorbell
 from flightlogic import classify_flight, queue_mode, resolve_route, passes_direction_filter, parse_fr24_row
 
 # Watchdog disabled - WatchDogMode.RESET not supported on ESP32-S3 in CP9+
@@ -18,6 +19,29 @@ session = adafruit_requests.Session(pool, ssl.create_default_context())
 
 _next_ota = time.monotonic() + 300      # first check 5 min after boot
 _confirm_at = time.monotonic() + 120    # confirm once we have survived 2 minutes
+
+def _aio_configured():
+    user = os.getenv("AIO_USERNAME")
+    key = os.getenv("AIO_KEY")
+    placeholders = {None, "", "your_aio_username", "your_aio_key"}
+    return user not in placeholders and key not in placeholders
+
+def _show_updating():
+    matrixportal.display.root_group = g
+    flap_all("UPDATING", "", "")
+
+
+bell = None
+if _aio_configured():
+    bell = Doorbell(
+        pool, ssl.create_default_context(),
+        os.getenv("AIO_USERNAME"), os.getenv("AIO_KEY"),
+        poll_interval=3600,
+        on_checking=_show_updating,
+    )
+    print("ota: doorbell configured")
+else:
+    print("ota: no AIO credentials, falling back to hourly polling")
 
 def wfeed():
     try: w.feed()
@@ -1581,12 +1605,11 @@ while True:
         state.confirm()      # tells recovery.py this build is good
         _confirm_at = None
 
-    if time.monotonic() > _next_ota:
+    if bell:
+        bell.poll(session)   # cheap when nothing is due; on_checking shows the message if a check runs
+    elif time.monotonic() > _next_ota:
         _next_ota = time.monotonic() + 3600
-        matrixportal.display.root_group = g
-        flap_all("", "Updating...", "")
+        _show_updating()
         applied = updater.check_and_apply(session)
         if not applied:
-            # no update was needed/available — restore normal display
-            # (only reached if it returns False; a successful apply resets the board)
-            pass
+            flap_all("", "", "")
