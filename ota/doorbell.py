@@ -1,4 +1,4 @@
-# ota/doorbell.py
+# ota/doorbell.py -- PHASE 2. Ship this over the air once phase 1 works.
 #
 # Subscribes to an Adafruit IO feed so a release can push the device into
 # checking immediately instead of waiting for the next poll.
@@ -24,15 +24,18 @@ class Doorbell:
         aio_key,
         feed="ota",
         poll_interval=3600,
+        mqtt_loop_interval=5,
         log=print,
-        on_checking=None,
+        on_installing=None,
     ):
         self.feed = "%s/feeds/%s" % (aio_user, feed)
         self.poll_interval = poll_interval
+        self.mqtt_loop_interval = mqtt_loop_interval
         self.log = log
-        self.on_checking = on_checking
+        self.on_installing = on_installing
         self._ring = False
         self._next_poll = 0
+        self._next_loop_check = 0
         self._next_retry = 0
 
         self.client = MQTT.MQTT(
@@ -73,18 +76,24 @@ class Doorbell:
         On success the board resets, so in practice this returns True only if
         you passed reset=False into the updater.
         """
-        try:
-            if self._ensure_connected():
-                self.client.loop(timeout=1)
-        except Exception as e:  # noqa: BLE001
-            self.log("ota: doorbell loop failed: %r" % e)
-            try:
-                self.client.disconnect()
-            except Exception:  # noqa: BLE001
-                pass
-            self._next_retry = time.monotonic() + 60
-
         now = time.monotonic()
+        if now >= self._next_loop_check:
+            self._next_loop_check = now + self.mqtt_loop_interval
+            try:
+                if self._ensure_connected():
+                    # MiniMQTT requires loop's timeout >= its own socket_timeout
+                    # (default 1s) or it raises ValueError. Throttled via
+                    # mqtt_loop_interval above so this doesn't block every
+                    # single call to poll() for up to a second.
+                    self.client.loop(timeout=1)
+            except Exception as e:  # noqa: BLE001
+                self.log("ota: doorbell loop failed: %r" % e)
+                try:
+                    self.client.disconnect()
+                except Exception:  # noqa: BLE001
+                    pass
+                self._next_retry = now + 60
+
         due = self._ring or now >= self._next_poll
         if not due:
             return False
@@ -92,10 +101,6 @@ class Doorbell:
         self._ring = False
         self._next_poll = now + self.poll_interval
 
-        if self.on_checking is not None:
-            try:
-                self.on_checking()
-            except Exception as e:  # noqa: BLE001 - a display glitch must not block the check
-                self.log("ota: on_checking callback failed: %r" % e)
-
-        return updater.check_and_apply(session, log=self.log)
+        return updater.check_and_apply(
+            session, log=self.log, on_installing=self.on_installing
+        )

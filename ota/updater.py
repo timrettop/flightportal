@@ -137,14 +137,21 @@ def fetch_manifest(session):
     return json.loads(raw)
 
 
-def check_and_apply(session, log=print, reset=True):
+def check_and_apply(session, log=print, reset=True, on_installing=None):
     """Check for an update and apply it. Resets the board on success.
+
+    on_installing, if given, is called once -- after a newer version with
+    real file changes is confirmed, immediately before downloads start. It
+    is never called for "up to date" or "no file changes" outcomes, so it is
+    safe to use as a "genuinely installing something" display hook without
+    a matching "clear the message" callback: nothing is ever shown for a
+    no-op check in the first place.
 
     Returns False if nothing was applied. Never raises: a failed update
     check should not take down the display.
     """
     try:
-        return _check_and_apply(session, log, reset)
+        return _check_and_apply(session, log, reset, on_installing)
     except UpdateError as e:
         log("ota: %s" % e)
     except Exception as e:  # network hiccups, JSON errors, full filesystem
@@ -152,7 +159,7 @@ def check_and_apply(session, log=print, reset=True):
     return False
 
 
-def _check_and_apply(session, log, reset):
+def _check_and_apply(session, log, reset, on_installing):
     manifest = fetch_manifest(session)
 
     new_version = int(manifest["version"])
@@ -184,6 +191,12 @@ def _check_and_apply(session, log, reset):
         return False
 
     log("ota: v%d -> %d, %d file(s)" % (current, new_version, len(pending)))
+
+    if on_installing is not None:
+        try:
+            on_installing()
+        except Exception as e:  # noqa: BLE001 - a display glitch must not abort a real update
+            log("ota: on_installing callback failed: %r" % e)
 
     _clear(recovery.STAGE_DIR)
     for path, want in pending:

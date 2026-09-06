@@ -30,9 +30,6 @@ def _show_updating():
     matrixportal.display.root_group = g
     flap_all("", "Updating", "")
 
-def _clear_message():
-    flap_all("", "", "")
-
 
 bell = None
 if _aio_configured():
@@ -40,7 +37,7 @@ if _aio_configured():
         pool, ssl.create_default_context(),
         os.getenv("AIO_USERNAME"), os.getenv("AIO_KEY"),
         poll_interval=3600,
-        on_checking=_show_updating,
+        on_installing=_show_updating,
     )
     print("ota: doorbell configured")
 else:
@@ -1612,7 +1609,4 @@ while True:
         bell.poll(session)   # cheap when nothing is due; on_checking/on_no_update handle the message
     elif time.monotonic() > _next_ota:
         _next_ota = time.monotonic() + 3600
-        _show_updating()
-        applied = updater.check_and_apply(session)
-        if not applied:
-            _clear_message()
+        updater.check_and_apply(session, on_installing=_show_updating)
