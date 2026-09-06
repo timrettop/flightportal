@@ -29,6 +29,7 @@ NEVER_SHIP = {
     "ota/recovery.py",
     "settings.toml",
     "secrets.py",
+    "config.py",
 }
 
 

@@ -28,6 +28,7 @@ PROTECTED = (
     "ota/recovery.py",
     "settings.toml",
     "secrets.py",
+    "config.py",  # device-specific: coordinates, filters. Repo copy is an example only.
 )
 
 MAX_MANIFEST_BYTES = 8192
