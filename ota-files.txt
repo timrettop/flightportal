@@ -1,0 +1,6 @@
+# Files shipped by over-the-air updates, one glob per line
+# The trusted core and your local config are deliberately absent
+code.py
+config.py
+ota/updater.py
+ota/__init__.py

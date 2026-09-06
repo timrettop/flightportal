@@ -6,11 +6,18 @@ from adafruit_matrixportal.matrixportal import MatrixPortal
 from microcontroller import watchdog as w
 from watchdog import WatchDogMode
 import wifi, socketpool, ssl, adafruit_requests
+from ota import state, updater
 from flightlogic import classify_flight, queue_mode, resolve_route, passes_direction_filter, parse_fr24_row
 
 # Watchdog disabled - WatchDogMode.RESET not supported on ESP32-S3 in CP9+
 #w.timeout = 60
 #w.mode = WatchDogMode.RESET
+
+pool = socketpool.SocketPool(wifi.radio)
+session = adafruit_requests.Session(pool, ssl.create_default_context())
+
+_next_ota = time.monotonic() + 300      # first check 5 min after boot
+_confirm_at = time.monotonic() + 120    # confirm once we have survived 2 minutes
 
 def wfeed():
     try: w.feed()
@@ -1569,3 +1576,11 @@ while True:
 
     gc.collect()
     time.sleep(0.5)
+
+    if _confirm_at and time.monotonic() > _confirm_at:
+        state.confirm()      # tells recovery.py this build is good
+        _confirm_at = None
+
+    if time.monotonic() > _next_ota:
+        _next_ota = time.monotonic() + 3600
+        updater.check_and_apply(session)   # resets the board if it applies
