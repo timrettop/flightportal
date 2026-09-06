@@ -1583,4 +1583,10 @@ while True:
 
     if time.monotonic() > _next_ota:
         _next_ota = time.monotonic() + 3600
-        updater.check_and_apply(session)   # resets the board if it applies
+        matrixportal.display.root_group = g
+        flap_all("", "Updating...", "")
+        applied = updater.check_and_apply(session)
+        if not applied:
+            # no update was needed/available — restore normal display
+            # (only reached if it returns False; a successful apply resets the board)
+            pass
