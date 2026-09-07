@@ -1,0 +1,102 @@
+name: OTA release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    # Attach a protected environment with required reviewers if the signing key
+    # lives in Actions secrets. Without it, anyone who can push a tag can sign
+    # arbitrary code for your device.
+    environment: ota-signing
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # version is derived from the commit count
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install cryptography
+
+      - name: Reject syntax errors before they reach the device
+        run: |
+          python -m compileall -q $(grep -v '^\s*#' ota-files.txt | grep -v '^\s*$')
+
+      - name: Build and sign the manifest
+        env:
+          OTA_SIGNING_KEY: ${{ secrets.OTA_SIGNING_KEY }}
+        run: |
+          if [ -z "$OTA_SIGNING_KEY" ]; then
+            echo "::error::OTA_SIGNING_KEY secret is not set"; exit 1
+          fi
+          umask 077
+          printf '%s' "$OTA_SIGNING_KEY" > /tmp/ota-private.pem
+          python tools/make_manifest.py \
+            --key /tmp/ota-private.pem \
+            --repo "$GITHUB_REPOSITORY" \
+            --sha "$GITHUB_SHA" \
+            --out dist
+          shred -u /tmp/ota-private.pem
+
+      - name: Verify the signature the way the device will
+        run: |
+          python - <<'PY'
+          import base64, pathlib, sys
+          sys.path.insert(0, ".")
+          from ota import verify
+          raw = pathlib.Path("dist/manifest.json").read_bytes()
+          sig = base64.b64decode(pathlib.Path("dist/manifest.sig").read_text())
+          if not verify.verify(raw, sig):
+              sys.exit("signature does not verify against the committed public key")
+          print("signature verifies against ota/pubkey.py")
+          PY
+
+      - name: Confirm the version moves forward
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NEW=$(python -c "import json;print(json.load(open('dist/manifest.json'))['version'])")
+          OLD=$(gh release download --pattern manifest.json --dir /tmp/prev 2>/dev/null \
+                && python -c "import json;print(json.load(open('/tmp/prev/manifest.json'))['version'])" \
+                || echo 0)
+          echo "previous=$OLD new=$NEW"
+          if [ "$NEW" -le "$OLD" ]; then
+            echo "::error::version $NEW does not exceed published $OLD; devices will refuse it"
+            exit 1
+          fi
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          [ "$GITHUB_REF_TYPE" = "tag" ] || TAG="manual-$(date +%Y%m%d%H%M%S)"
+          gh release create "$TAG" dist/manifest.json dist/manifest.sig \
+            --title "$TAG" \
+            --notes "OTA manifest for ${GITHUB_SHA}"
+
+      - name: Ring the doorbell
+        env:
+          AIO_USER: ${{ secrets.AIO_USER }}
+          AIO_KEY: ${{ secrets.AIO_KEY }}
+        # Best effort. The device polls on a timer regardless, so a failure
+        # here only delays the update, it does not lose it.
+        continue-on-error: true
+        run: |
+          [ -n "$AIO_KEY" ] || { echo "no AIO_KEY, skipping"; exit 0; }
+          VERSION=$(python -c "import json;print(json.load(open('dist/manifest.json'))['version'])")
+          curl -sS -X POST \
+            -H "X-AIO-Key: $AIO_KEY" \
+            -H "Content-Type: application/json" \
+            -d "{\"value\":\"$VERSION\"}" \
+            "https://io.adafruit.com/api/v2/$AIO_USER/feeds/ota/data"

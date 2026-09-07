@@ -1,6 +1,6 @@
 # flightlogic.py
 #
-# Pure flight-classification logic for FlightPortal. Deliberately imports
+# Pure flight-classification logic for FlightPortal. Deliberately imports 
 # nothing hardware- or network-related, so it runs on a normal computer and
 # can be unit-tested off the MatrixPortal. Keep it that way -- if you find
 # yourself importing `board`, `wifi`, or `displayio` here, it belongs in

@@ -6,11 +6,42 @@ from adafruit_matrixportal.matrixportal import MatrixPortal
 from microcontroller import watchdog as w
 from watchdog import WatchDogMode
 import wifi, socketpool, ssl, adafruit_requests
+from ota import state, updater
+from ota.doorbell import Doorbell
 from flightlogic import classify_flight, queue_mode, resolve_route, passes_direction_filter, parse_fr24_row
 
 # Watchdog disabled - WatchDogMode.RESET not supported on ESP32-S3 in CP9+
 #w.timeout = 60
 #w.mode = WatchDogMode.RESET
+
+pool = socketpool.SocketPool(wifi.radio)
+session = adafruit_requests.Session(pool, ssl.create_default_context())
+
+_next_ota = time.monotonic() + 300      # first check 5 min after boot
+_confirm_at = time.monotonic() + 120    # confirm once we have survived 2 minutes
+
+def _aio_configured():
+    user = os.getenv("AIO_USERNAME")
+    key = os.getenv("AIO_KEY")
+    placeholders = {None, "", "your_aio_username", "your_aio_key"}
+    return user not in placeholders and key not in placeholders
+
+def _show_updating():
+    matrixportal.display.root_group = g
+    flap_all("", "Updating", "")
+
+
+bell = None
+if _aio_configured():
+    bell = Doorbell(
+        pool, ssl.create_default_context(),
+        os.getenv("AIO_USERNAME"), os.getenv("AIO_KEY"),
+        poll_interval=3600,
+        on_installing=_show_updating,
+    )
+    print("ota: doorbell configured")
+else:
+    print("ota: no AIO credentials, falling back to hourly polling")
 
 def wfeed():
     try: w.feed()
@@ -1569,3 +1600,13 @@ while True:
 
     gc.collect()
     time.sleep(0.5)
+
+    if _confirm_at and time.monotonic() > _confirm_at:
+        state.confirm()      # tells recovery.py this build is good
+        _confirm_at = None
+
+    if bell:
+        bell.poll(session)   # cheap when nothing is due; on_checking/on_no_update handle the message
+    elif time.monotonic() > _next_ota:
+        _next_ota = time.monotonic() + 3600
+        updater.check_and_apply(session, on_installing=_show_updating)
