@@ -4,7 +4,7 @@ addopts = "-p no:debugging"
 
 [tool.coverage.run]
 source = ["ota", "flightlogic"]
-omit = ["code.py", "boot.py", "tests/*", "tools/*", "scripts/*"]
+omit = ["code.py", "boot.py", "demo_feed.py", "tests/*", "tools/*", "scripts/*"]
 
 [tool.coverage.report]
 show_missing = true
