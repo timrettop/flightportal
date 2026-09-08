@@ -3,6 +3,7 @@ testpaths = ["tests"]
 addopts = "-p no:debugging"
 
 [tool.coverage.run]
+branch = true
 source = ["ota", "flightlogic"]
 omit = ["code.py", "boot.py", "demo_feed.py", "tests/*", "tools/*", "scripts/*"]
 
