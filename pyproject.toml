@@ -2,3 +2,10 @@
 testpaths = ["tests"]
 addopts = "-p no:debugging"
 
+[tool.coverage.run]
+source = ["ota", "flightlogic"]
+omit = ["code.py", "boot.py", "tests/*", "tools/*", "scripts/*"]
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:"]
