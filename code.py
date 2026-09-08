@@ -47,7 +47,54 @@ def wfeed():
     try: w.feed()
     except: pass
 
-FONT = terminalio.FONT
+# ---------------------------------------------------------------------------
+# FONT TEST HARNESS
+# ---------------------------------------------------------------------------
+# Three candidate fonts for a 4-row layout on a 64x32 panel. Uncomment exactly
+# ONE block. Each sets FONT, ROW_Y (the y centre of each of the four rows) and
+# CHARS_PER_ROW (informational - how many glyphs fit starting at x=1).
+#
+# Label.y is the VERTICAL CENTRE of the text bounding box, not the baseline.
+# So a 6px-tall glyph on a row centred at y=3 occupies rows 0-6.
+#
+# Row 31 is deliberately left free - show_flight_queue puts its progress bar
+# there and show_weather_persistent puts its scan line there.
+#
+# Drop the .bdf files in /fonts/ on CIRCUITPY. Converting them to .pcf first
+# is strongly recommended - much faster to load and lighter on RAM.
+# ---------------------------------------------------------------------------
+from adafruit_bitmap_font import bitmap_font
+
+# --- OPTION 1: tom-thumb, 3x5 glyph / 4px advance -> ~15 chars per row -------
+FONT_PATH     = "/fonts/tom-thumb-ascii.pcf"
+ROW_Y         = (3, 11, 19, 27)
+CHARS_PER_ROW = 15
+
+# --- OPTION 2: 4x6, 4px advance -> ~15 chars per row ------------------------
+#FONT_PATH     = "/fonts/4x6-ascii.pcf"
+#ROW_Y         = (3, 11, 19, 27)
+#CHARS_PER_ROW = 15
+
+# --- FALLBACK: the original built-in 6x8. Only fits THREE rows; included so
+# --- you can flip back for an A/B without editing anything else.
+# FONT_PATH     = None
+# ROW_Y         = (4, 15, 26, 27)   # rows 3 and 4 will overlap - expected
+# CHARS_PER_ROW = 10
+
+if FONT_PATH:
+    FONT = bitmap_font.load_font(FONT_PATH)
+    # Preload every glyph the app can emit so there's no stutter the first time
+    # an unseen character appears mid-scroll.
+    FONT.load_glyphs(
+        b"ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        b"abcdefghijklmnopqrstuvwxyz"
+        b"0123456789"
+        b" -.,:/>#()'"
+    )
+    print("font: loaded " + FONT_PATH)
+else:
+    FONT = terminalio.FONT
+    print("font: terminalio builtin 6x8")
 
 try:
     from secrets import secrets # type: ignore
@@ -90,6 +137,7 @@ ENABLE_WEATHER  = config.get("enable_weather",  True)
 ROW_ONE_COLOUR   = 0xFFFFFF
 ROW_TWO_COLOUR   = 0xFFFFFF
 ROW_THREE_COLOUR = 0xFFFFFF
+ROW_FOUR_COLOUR  = 0xFFFFFF
 PLANE_COLOUR     = 0x4B0082
 TEXT_SPEED       = 0.04
 FLAP_SPEED       = 0.03
@@ -1127,14 +1175,21 @@ def plane_animation_landing():
 
 # ---- Labels ----
 label1 = adafruit_display_text.label.Label(FONT,color=ROW_ONE_COLOUR,text="")
-label1.x=1; label1.y=4
+label1.x=1; label1.y=ROW_Y[0]
 label2 = adafruit_display_text.label.Label(FONT,color=ROW_TWO_COLOUR,text="")
-label2.x=1; label2.y=15
+label2.x=1; label2.y=ROW_Y[1]
 label3 = adafruit_display_text.label.Label(FONT,color=ROW_THREE_COLOUR,text="")
-label3.x=1; label3.y=27
+label3.x=1; label3.y=ROW_Y[2]
+# TEST ROW: mirrors label3's content for now. Give it real content once the
+# layout is settled - see the CONTENT LAYOUT notes at the bottom of this file.
+label4 = adafruit_display_text.label.Label(FONT,color=ROW_FOUR_COLOUR,text="")
+label4.x=1; label4.y=ROW_Y[3]
+
+# Iterating this is much tidier than naming each label at every call site.
+labels = (label1, label2, label3, label4)
 
 g = displayio.Group()
-g.append(label1); g.append(label2); g.append(label3)
+for _l in labels: g.append(_l)
 matrixportal.display.root_group = g
 
 label1_short=label1_long=label2_short=label2_long=label3_short=label3_long=''
@@ -1154,24 +1209,30 @@ def scroll(line, restore_x):
         line.x=i; wfeed(); time.sleep(TEXT_SPEED)
     line.x = restore_x
 
-def flap_all(t1, t2, t3):
-    """Flap all three rows simultaneously"""
-    t1 = t1.upper(); t2 = t2.upper(); t3 = t3.upper()
-    s1 = [FLAP_CHARS.index(c) if c in FLAP_CHARS else 0 for c in t1]
-    s2 = [FLAP_CHARS.index(c) if c in FLAP_CHARS else 0 for c in t2]
-    s3 = [FLAP_CHARS.index(c) if c in FLAP_CHARS else 0 for c in t3]
-    mx = max(max(s1) if s1 else 0, max(s2) if s2 else 0, max(s3) if s3 else 0)
+def flap_all(t1, t2, t3, t4=None):
+    """Flap all rows simultaneously.
+
+    t4 defaults to t3 so the fourth row duplicates the third during layout
+    testing. Pass a real fourth string once the content split is decided, and
+    every existing three-argument call site keeps working unchanged.
+    """
+    if t4 is None:
+        t4 = t3
+    texts = (t1.upper(), t2.upper(), t3.upper(), t4.upper())
+    steps = [[FLAP_CHARS.index(c) if c in FLAP_CHARS else 0 for c in t]
+             for t in texts]
+    mx = max((max(s) if s else 0) for s in steps)
     for step in range(mx+1):
-        label1.text = ''.join(FLAP_CHARS[min(step,s)] for s in s1)
-        label2.text = ''.join(FLAP_CHARS[min(step,s)] for s in s2)
-        label3.text = ''.join(FLAP_CHARS[min(step,s)] for s in s3)
+        for lbl, s in zip(labels, steps):
+            lbl.text = ''.join(FLAP_CHARS[min(step,c)] for c in s)
         wfeed(); time.sleep(FLAP_SPEED)
-    label1.text=t1; label2.text=t2; label3.text=t3
+    for lbl, t in zip(labels, texts):
+        lbl.text = t
 
 def display_flight():
     matrixportal.display.root_group = g
-    label1.x=1; label2.x=1; label3.x=1
-    # All three rows flap in simultaneously
+    for lbl in labels: lbl.x = 1
+    # All rows flap in simultaneously (row 4 mirrors row 3 for now)
     flap_all(label1_short, label2_short, label3_short)
     time.sleep(1.5)
     # Then scroll each long version in sequence
@@ -1179,10 +1240,18 @@ def display_flight():
     time.sleep(0.5)
     label2.text=label2_long; scroll(label2,1); label2.text=label2_short; label2.x=1
     time.sleep(0.5)
-    label3.text=label3_long; scroll(label3,1); label3.text=label3_short; label3.x=1
+    # Row 3 and its duplicate row 4 scroll together so they stay visually paired
+    label3.text=label3_long; label4.text=label3_long
+    label4.x = matrixportal.display.width
+    label3.x = matrixportal.display.width
+    for i in range(matrixportal.display.width+1, 0-label3.bounding_box[2], -1):
+        label3.x = i; label4.x = i
+        wfeed(); time.sleep(TEXT_SPEED)
+    label3.text=label3_short; label3.x=1
+    label4.text=label3_short; label4.x=1
 
 def clear_flight():
-    label1.text=label2.text=label3.text=""
+    for lbl in labels: lbl.text = ""
 
 def set_labels_from_feed(flight_info):
     global label1_short,label1_long,label2_short,label2_long,label3_short,label3_long
@@ -1204,6 +1273,7 @@ def set_labels_from_feed(flight_info):
 
     label2.color = ROW_TWO_COLOUR
     label3.color = ROW_THREE_COLOUR
+    label4.color = ROW_FOUR_COLOUR
 
     # Enrich only what's actually missing - each API call costs ~1-2s
     hex_code = flight_info[0] if flight_info else ""
@@ -1304,15 +1374,18 @@ def show_weather():
             rise_str = sunrise.split('T')[-1][:5] if sunrise else ""
             sset_str = sunset.split('T')[-1][:5]  if sunset  else ""
 
+            _sun_text = ("SET "+sset_str if show_sunset else "Up "+rise_str)
             wg = displayio.Group()
             wl1 = adafruit_display_text.label.Label(FONT, color=temp_colour(temp), text=HOME_AIRPORT+" "+str(temp)+TEMP_UNIT)
-            wl1.x=1; wl1.y=4
-            wl2 = adafruit_display_text.label.Label(FONT,color=0xFFFFFF,text=cond[:10])
-            wl2.x=1; wl2.y=15
-            wl3 = adafruit_display_text.label.Label(FONT,color=0xFFAA00,
-                text=("SET "+sset_str if show_sunset else "Up "+rise_str))
-            wl3.x=1; wl3.y=26
-            wg.append(wl1); wg.append(wl2); wg.append(wl3)
+            wl1.x=1; wl1.y=ROW_Y[0]
+            wl2 = adafruit_display_text.label.Label(FONT,color=0xFFFFFF,text=cond[:CHARS_PER_ROW])
+            wl2.x=1; wl2.y=ROW_Y[1]
+            wl3 = adafruit_display_text.label.Label(FONT,color=0xFFAA00,text=_sun_text)
+            wl3.x=1; wl3.y=ROW_Y[2]
+            # TEST ROW: duplicate of wl3
+            wl4 = adafruit_display_text.label.Label(FONT,color=0xFFAA00,text=_sun_text)
+            wl4.x=1; wl4.y=ROW_Y[3]
+            wg.append(wl1); wg.append(wl2); wg.append(wl3); wg.append(wl4)
             matrixportal.display.root_group = wg
             print("Weather: "+str(temp)+TEMP_UNIT+" "+cond)
             for _ in range(12): wfeed(); time.sleep(0.5)
@@ -1345,20 +1418,23 @@ def show_weather_persistent(duration=20):
         rise_str = sunrise.split('T')[-1][:5] if sunrise else ""
         sset_str = sunset.split('T')[-1][:5]  if sunset  else ""
 
+        _sun_text = ("SET "+sset_str if show_sunset else "Up "+rise_str)
         wg = displayio.Group()
         wl1 = adafruit_display_text.label.Label(FONT, color=temp_colour(temp), text=HOME_AIRPORT+" "+str(temp)+TEMP_UNIT)
-        wl1.x=1; wl1.y=4
-        wl2 = adafruit_display_text.label.Label(FONT, color=0xFFFFFF, text=cond[:10])
-        wl2.x=1; wl2.y=15
-        wl3 = adafruit_display_text.label.Label(FONT, color=0xFFAA00,
-            text=("SET "+sset_str if show_sunset else "Up "+rise_str))
-        wl3.x=1; wl3.y=26
+        wl1.x=1; wl1.y=ROW_Y[0]
+        wl2 = adafruit_display_text.label.Label(FONT, color=0xFFFFFF, text=cond[:CHARS_PER_ROW])
+        wl2.x=1; wl2.y=ROW_Y[1]
+        wl3 = adafruit_display_text.label.Label(FONT, color=0xFFAA00, text=_sun_text)
+        wl3.x=1; wl3.y=ROW_Y[2]
+        # TEST ROW: duplicate of wl3
+        wl4 = adafruit_display_text.label.Label(FONT, color=0xFFAA00, text=_sun_text)
+        wl4.x=1; wl4.y=ROW_Y[3]
         scan_bmp = displayio.Bitmap(64, 1, 2)
         scan_pal = displayio.Palette(2)
         scan_pal[0] = 0x000000
         scan_pal[1] = 0x004400
         scan_tg = displayio.TileGrid(scan_bmp, pixel_shader=scan_pal, x=0, y=31)
-        wg.append(wl1); wg.append(wl2); wg.append(wl3); wg.append(scan_tg)
+        wg.append(wl1); wg.append(wl2); wg.append(wl3); wg.append(wl4); wg.append(scan_tg)
         matrixportal.display.root_group = wg
         print("Weather (persistent): "+str(temp)+TEMP_UNIT+" "+cond)
 
@@ -1481,15 +1557,16 @@ def show_flight_queue(flights, raw, classes=None):
         while True:
             for idx, (pos, callsign, aircraft, aircraft_full, route, dist, alt) in enumerate(planes):
                 colour = ROW_COLOURS[idx % len(ROW_COLOURS)]
-                label1.color = colour
-                label2.color = colour
-                label3.color = colour
+                for lbl in labels:
+                    lbl.color = colour
+                    lbl.x = 1
                 label1.text = "#"+str(pos)+" "+callsign[:7]
-                label1.x = 1
                 label2.text = aircraft+" "+str(dist)+"km"
-                label2.x = 1
                 label3.text = route+" "+str(alt)+"ft"
-                label3.x = 1
+                # TEST ROW: duplicate of row 3. Once you've picked a font this
+                # is the obvious place to split - e.g. label3 = route and
+                # label4 = str(alt)+"ft", which kills most of the scrolling.
+                label4.text = label3.text
 
                 plane_start = time.monotonic()
                 scroll_done = False
@@ -1522,6 +1599,7 @@ def show_flight_queue(flights, raw, classes=None):
                                 if sx3 > scroll_end_x3:
                                     sx3 -= 1
                                     label3.x = sx3
+                                    label4.x = sx3   # TEST ROW follows row 3
                                 se = time.monotonic() - scroll_start
                                 current_tick = min(tick + se / 0.5, total_ticks)
                                 pixels_remaining = max(0, min(64, 64 - int((current_tick / total_ticks) * 64)))
@@ -1546,12 +1624,13 @@ def show_flight_queue(flights, raw, classes=None):
                         break
     finally:
         g.remove(bar_tg)
-        label1.text = ""
-        label2.text = ""
-        label3.text = ""
+        for lbl in labels:
+            lbl.text = ""
+            lbl.x = 1
         label1.color = ROW_ONE_COLOUR
         label2.color = ROW_TWO_COLOUR
         label3.color = ROW_THREE_COLOUR
+        label4.color = ROW_FOUR_COLOUR
 
 last_flight=''
 last_mode=None
@@ -1610,3 +1689,30 @@ while True:
     elif time.monotonic() > _next_ota:
         _next_ota = time.monotonic() + 3600
         updater.check_and_apply(session, on_installing=_show_updating)
+
+
+# ---------------------------------------------------------------------------
+# CONTENT LAYOUT NOTES
+# ---------------------------------------------------------------------------
+# Row 4 is currently a duplicate of row 3 everywhere. 
+# Three places emit it, all marked "TEST ROW":
+#
+#   1. show_flight_queue()      - label4.text = label3.text
+#   2. show_weather()           - wl4 duplicates wl3
+#   3. show_weather_persistent()- wl4 duplicates wl3
+#
+# flap_all() takes an optional 4th argument that defaults to the 3rd, so
+# display_flight() and _show_updating() also mirror row 3 without changes.
+#
+# The split idea per screen:
+#
+#   FLIGHT QUEUE          WEATHER
+#   1  #1 CALLSIGN        1  ORD 72F
+#   2  B738 12.3km        2  Partly cloudy
+#   3  KORD->KLAX         3  SET 19:42
+#   4  5000ft             4  (wind? humidity? next flight ETA?)
+#
+# Splitting route and altitude onto separate rows should get both under
+# CHARS_PER_ROW, at which point needs_scroll3 stops firing and the scroll
+# branch in show_flight_queue becomes mostly dead code.
+# ---------------------------------------------------------------------------
