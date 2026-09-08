@@ -22,3 +22,11 @@ boot_out.txt
 .staging
 ota-private.pem
 dist/
+
+# Coverage
+.coverage
+.coverage.*
+coverage.json
+coverage.xml
+lcov.info
+htmlcov/
