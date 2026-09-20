@@ -14,6 +14,8 @@ from flightlogic import (
     queue_mode,
     resolve_route,
     passes_direction_filter,
+    parse_hhmm,
+    in_sleep_window,
 )
 
 HOME = "ZRH"
@@ -109,6 +111,42 @@ def test_resolve_fills_home_end():
 ])
 def test_direction_filter(cls, show_arr, show_dep, expected):
     assert passes_direction_filter(cls, show_arr, show_dep) is expected
+
+
+# ---- parse_hhmm ----
+@pytest.mark.parametrize("s,expected", [
+    ("00:00", 0),
+    ("06:00", 360),
+    ("23:00", 1380),
+    ("23:59", 1439),
+    ("9:05", 545),
+])
+def test_parse_hhmm(s, expected):
+    assert parse_hhmm(s) == expected
+
+
+@pytest.mark.parametrize("s", ["", "garbage", "23", "23:", ":30", None])
+def test_parse_hhmm_malformed_defaults_to_zero(s):
+    assert parse_hhmm(s) == 0
+
+
+# ---- in_sleep_window ----
+@pytest.mark.parametrize("now,start,end,expected", [
+    # normal (non-wrapping) window
+    (12 * 60, 10 * 60, 14 * 60, True),
+    (9 * 60, 10 * 60, 14 * 60, False),
+    (14 * 60, 10 * 60, 14 * 60, False),   # end is exclusive
+    (10 * 60, 10 * 60, 14 * 60, True),    # start is inclusive
+    # wrapping window (23:00 -> 06:00)
+    (23 * 60 + 30, 23 * 60, 6 * 60, True),
+    (3 * 60, 23 * 60, 6 * 60, True),
+    (6 * 60, 23 * 60, 6 * 60, False),      # end is exclusive
+    (12 * 60, 23 * 60, 6 * 60, False),
+    # start == end -> never asleep
+    (0, 5 * 60, 5 * 60, False),
+])
+def test_in_sleep_window(now, start, end, expected):
+    assert in_sleep_window(now, start, end) is expected
 
 
 # ---- property-based (optional: pip install hypothesis) ----

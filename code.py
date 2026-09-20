@@ -8,7 +8,7 @@ from watchdog import WatchDogMode
 import wifi, socketpool, ssl, adafruit_requests
 from ota import state, updater
 from ota.doorbell import Doorbell
-from flightlogic import classify_flight, queue_mode, resolve_route, passes_direction_filter, parse_fr24_row
+from flightlogic import classify_flight, queue_mode, resolve_route, passes_direction_filter, parse_fr24_row, parse_hhmm, in_sleep_window
 
 # Watchdog disabled - WatchDogMode.RESET not supported on ESP32-S3 in CP9+
 #w.timeout = 60
@@ -85,6 +85,12 @@ SHOW_HELICOPTERS   = config.get("show_helicopters", False)
 # Feature flags
 ENABLE_FLIGHTS  = config.get("enable_flights",  True)
 ENABLE_WEATHER  = config.get("enable_weather",  True)
+
+# Screen sleep schedule
+SLEEP_ENABLED    = config.get("sleep_enabled", False)
+SLEEP_START      = config.get("sleep_start", "23:00")
+SLEEP_END        = config.get("sleep_end", "06:00")
+SLEEP_UTC_OFFSET = config.get("sleep_utc_offset", 0)
 
 # Colours
 ROW_ONE_COLOUR   = 0xFFFFFF
@@ -904,6 +910,45 @@ def plane_colour_for(aircraft):
 status_light = neopixel.NeoPixel(board.NEOPIXEL, 1, brightness=0.2)
 matrixportal = MatrixPortal(headers=rheaders, rotation=0, debug=False)
 
+# ---- Screen sleep ----
+TIME_URL             = "https://io.adafruit.com/api/v2/time/seconds"
+SLEEP_CHECK_INTERVAL = 60  # seconds between time-of-day checks, so we don't hammer the time API
+
+_display_asleep    = False
+_last_sleep_check  = 0
+
+def _current_local_minutes():
+    """Minutes since local midnight, from Adafruit IO's free UTC time service + configured offset."""
+    resp = requests_session.get(TIME_URL)
+    try:
+        utc_seconds = int(resp.text)
+    finally:
+        resp.close()
+    local_seconds = utc_seconds + int(SLEEP_UTC_OFFSET * 3600)
+    return (local_seconds // 60) % 1440
+
+def update_sleep_state():
+    """Poll the current time of day (rate-limited) and blank/restore the display accordingly."""
+    global _display_asleep, _last_sleep_check
+    now = time.monotonic()
+    if now - _last_sleep_check < SLEEP_CHECK_INTERVAL:
+        return
+    _last_sleep_check = now
+    try:
+        minutes = _current_local_minutes()
+        should_sleep = in_sleep_window(minutes, parse_hhmm(SLEEP_START), parse_hhmm(SLEEP_END))
+    except Exception as e:
+        print("sleep: time check failed: "+str(e))
+        return
+    if should_sleep and not _display_asleep:
+        print("sleep: entering sleep window")
+        matrixportal.display.brightness = 0
+        _display_asleep = True
+    elif not should_sleep and _display_asleep:
+        print("sleep: waking up")
+        matrixportal.display.brightness = 1.0
+        _display_asleep = False
+
 _plane_speed_delay = 0.03
 _plane_speed_knots = 0
 _is_a380 = False
@@ -1560,6 +1605,22 @@ while True:
     checkConnection()
     wfeed()
     print("memory free: "+str(gc.mem_free())) # type: ignore
+
+    if SLEEP_ENABLED:
+        update_sleep_state()
+
+    if SLEEP_ENABLED and _display_asleep:
+        gc.collect()
+        time.sleep(1)
+        if _confirm_at and time.monotonic() > _confirm_at:
+            state.confirm()      # tells recovery.py this build is good
+            _confirm_at = None
+        if bell:
+            bell.poll(session)
+        elif time.monotonic() > _next_ota:
+            _next_ota = time.monotonic() + 3600
+            updater.check_and_apply(session, on_installing=_show_updating)
+        continue
 
     if ENABLE_FLIGHTS:
         flights,raw = get_flights_demo(FLIGHT_URL, rheaders) if DEMO_MODE else get_flights(FLIGHT_URL, rheaders) # type: ignore 

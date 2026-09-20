@@ -20,4 +20,13 @@ config = {
     'enable_weather':     True,
 
     'demo_mode':          False,  # True = scripted demo feed (needs demo_feed.py on the board)
+
+    # Screen sleep - blanks the display overnight (or whenever) to save power / avoid glare.
+    # Current time is fetched from Adafruit IO's free time service (no account needed), which
+    # returns UTC - set 'sleep_utc_offset' to your local offset in hours (no DST handling, so
+    # nudge it by 1 twice a year if your region observes DST).
+    'sleep_enabled':     False,
+    'sleep_start':       '23:00',  # HH:MM local time to blank the display
+    'sleep_end':         '06:00',  # HH:MM local time to wake it back up
+    'sleep_utc_offset':  0,        # hours to add to UTC to get local time, e.g. -5, 1, 5.5
 }

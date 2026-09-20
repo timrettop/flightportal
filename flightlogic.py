@@ -103,6 +103,28 @@ def passes_direction_filter(cls, show_arrivals, show_departures):
     return True
 
 
+def parse_hhmm(s):
+    """'HH:MM' -> minutes since midnight. Returns 0 if the string is malformed."""
+    try:
+        h, m = s.split(":")
+        return int(h) * 60 + int(m)
+    except Exception:
+        return 0
+
+
+def in_sleep_window(now_minutes, start_minutes, end_minutes):
+    """Whether `now_minutes` falls within [start_minutes, end_minutes).
+
+    Handles a window that wraps past midnight (e.g. 23:00 -> 06:00). A window
+    where start == end is treated as "never asleep" rather than "always".
+    """
+    if start_minutes == end_minutes:
+        return False
+    if start_minutes < end_minutes:
+        return start_minutes <= now_minutes < end_minutes
+    return now_minutes >= start_minutes or now_minutes < end_minutes
+
+
 def parse_fr24_row(fid, fi):
     """Extract the fields FlightPortal uses from one FlightRadar24 feed row.
 

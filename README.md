@@ -104,8 +104,25 @@ config = {
     # Feature flags
     'enable_flights':        True,
     'enable_weather':        True,
+
+    # Screen sleep -- blanks the display overnight (or whenever) to save power / avoid glare
+    'sleep_enabled':         False,
+    'sleep_start':          '23:00',  # HH:MM local time
+    'sleep_end':            '06:00',  # HH:MM local time
+    'sleep_utc_offset':          0,   # hours to add to UTC to get local time
 }
 ```
+
+### Screen sleep
+
+Set `sleep_enabled` to `True` to blank the display between `sleep_start` and
+`sleep_end` (local time, `HH:MM`, wraps past midnight). There's no onboard
+clock, so the current time is fetched from Adafruit IO's free time service
+(no account needed) as UTC and shifted by `sleep_utc_offset` hours to get
+local time — there's no DST handling, so nudge the offset by 1 twice a year
+if your region observes it. While asleep, flight/weather polling pauses but
+OTA update checks keep running, and the display wakes automatically once
+`sleep_end` is reached.
 
 The `bounds_box` is `north,south,west,east` in decimal degrees. Adjust it to the area visible from your window. A box of roughly 0.1° latitude × 0.1° longitude works well for a city location.
 
