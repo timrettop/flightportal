@@ -20,6 +20,17 @@ Missing flight data is enriched automatically via adsb.lol and hexdb.io. Planesp
 
 Shown weather and temperature of configured airport between flights. Displays temperature in a colour that shifts from blue (freezing) through cyan, green and yellow to red (hot), alongside condition text and wind speed. Shows sunrise time before midday and sunset time after.
 
+### Clock
+
+A full-screen digital clock (12-hour, with AM/PM and the date) is shown for
+5 seconds before each weather screen. Time normally comes from Open-Meteo's
+own local timestamp — already fetched as part of the weather poll, and
+DST-aware since Open-Meteo resolves it from your `timezone` config. If
+weather is disabled, the same DST-aware offset is instead synced directly
+from Open-Meteo every few hours; only a device that has never synced falls
+back to the manual `sleep_utc_offset` config, which does not account for
+DST. Disable with `enable_clock: False`.
+
 ---
 
 ## Hardware
@@ -104,6 +115,7 @@ config = {
     # Feature flags
     'enable_flights':        True,
     'enable_weather':        True,
+    'enable_clock':          True,
 
     # Screen sleep -- blanks the display overnight (or whenever) to save power / avoid glare
     'sleep_enabled':         False,
@@ -116,13 +128,14 @@ config = {
 ### Screen sleep
 
 Set `sleep_enabled` to `True` to blank the display between `sleep_start` and
-`sleep_end` (local time, `HH:MM`, wraps past midnight). There's no onboard
-clock, so the current time is fetched from Adafruit IO's free time service
-(no account needed) as UTC and shifted by `sleep_utc_offset` hours to get
-local time — there's no DST handling, so nudge the offset by 1 twice a year
-if your region observes it. While asleep, flight/weather polling pauses but
-OTA update checks keep running, and the display wakes automatically once
-`sleep_end` is reached.
+`sleep_end` (local time, `HH:MM`, wraps past midnight). The board has no
+onboard RTC, so the current time is fetched from Adafruit IO's free time
+service (no account needed) as UTC, then shifted to local time using the
+same DST-aware offset the [clock](#clock) keeps synced — `sleep_utc_offset`
+only kicks in as a manual, non-DST-aware fallback if nothing has synced yet
+(weather and the clock both disabled). While asleep, flight/weather polling
+pauses but OTA update checks keep running, and the display wakes
+automatically once `sleep_end` is reached.
 
 The `bounds_box` is `north,south,west,east` in decimal degrees. Adjust it to the area visible from your window. A box of roughly 0.1° latitude × 0.1° longitude works well for a city location.
 
@@ -175,7 +188,7 @@ All free, no key required unless noted:
 
 ## Debugging
 
-Use PuTTY or a serial monitor. Find the COM port in Device Manager, connect at **115200 baud**. The code prints flight details, errors and API responses. You can also paste the feed URLs directly into a browser to check coverage for your area.
+Use PuTTY or a serial monitor. Find the COM port in Device Manager, connect at **115200 baud**. The code prints flight details, errors and API responses. On every boot it also prints the running release tag and OTA build number, and briefly flashes the tag on the display, so it's obvious what's actually installed. You can also paste the feed URLs directly into a browser to check coverage for your area.
 
 ---
 

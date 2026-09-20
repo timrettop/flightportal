@@ -18,13 +18,15 @@ config = {
     # Feature flags - set to False to disable
     'enable_flights':     True,
     'enable_weather':     True,
+    'enable_clock':       True,  # full-screen clock shown before the weather screen
 
     'demo_mode':          False,  # True = scripted demo feed (needs demo_feed.py on the board)
 
     # Screen sleep - blanks the display overnight (or whenever) to save power / avoid glare.
     # Current time is fetched from Adafruit IO's free time service (no account needed), which
-    # returns UTC - set 'sleep_utc_offset' to your local offset in hours (no DST handling, so
-    # nudge it by 1 twice a year if your region observes DST).
+    # returns UTC. 'sleep_utc_offset' is a manual, non-DST-aware fallback (in hours) - normally
+    # a DST-aware offset is learned automatically from Open-Meteo (via weather, or the clock's
+    # own periodic sync if weather is disabled), so this only matters if both are off.
     'sleep_enabled':     False,
     'sleep_start':       '23:00',  # HH:MM local time to blank the display
     'sleep_end':         '06:00',  # HH:MM local time to wake it back up

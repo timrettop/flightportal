@@ -19,6 +19,7 @@ session = adafruit_requests.Session(pool, ssl.create_default_context())
 
 _next_ota = time.monotonic() + 300      # first check 5 min after boot
 _confirm_at = time.monotonic() + 120    # confirm once we have survived 2 minutes
+_next_dst_sync = time.monotonic()       # due immediately -- only used when weather is disabled
 
 def _aio_configured():
     user = os.getenv("AIO_USERNAME")
@@ -86,6 +87,7 @@ SHOW_HELICOPTERS   = config.get("show_helicopters", False)
 # Feature flags
 ENABLE_FLIGHTS  = config.get("enable_flights",  True)
 ENABLE_WEATHER  = config.get("enable_weather",  True)
+ENABLE_CLOCK    = config.get("enable_clock",    True)
 
 # Screen sleep schedule
 SLEEP_ENABLED    = config.get("sleep_enabled", False)
@@ -914,19 +916,51 @@ matrixportal = MatrixPortal(headers=rheaders, rotation=0, debug=False)
 # ---- Screen sleep ----
 TIME_URL             = "https://io.adafruit.com/api/v2/time/seconds"
 SLEEP_CHECK_INTERVAL = 60  # seconds between time-of-day checks, so we don't hammer the time API
+DST_SYNC_INTERVAL    = 4 * 3600  # how often to re-sync the DST offset when weather is disabled
 
-_display_asleep    = False
-_last_sleep_check  = 0
+_display_asleep     = False
+_last_sleep_check   = 0
+_dst_offset_seconds = None  # learned from open-meteo; None until the first successful sync
 
-def _current_local_minutes():
-    """Minutes since local midnight, from Adafruit IO's free UTC time service + configured offset."""
+def _local_epoch_seconds():
+    """Seconds since the epoch, in local time.
+
+    Uses the DST-aware offset last learned from open-meteo (via a weather
+    fetch or _sync_dst_offset()) when one is available, falling back to the
+    manual sleep_utc_offset config -- which does not account for DST -- for
+    a device that has never synced one.
+    """
     resp = requests_session.get(TIME_URL)
     try:
         utc_seconds = int(resp.text)
     finally:
         resp.close()
-    local_seconds = utc_seconds + int(SLEEP_UTC_OFFSET * 3600)
-    return (local_seconds // 60) % 1440
+    offset = _dst_offset_seconds
+    if offset is None:
+        offset = int(SLEEP_UTC_OFFSET * 3600)
+    return utc_seconds + offset
+
+def _current_local_minutes():
+    """Minutes since local midnight."""
+    return (_local_epoch_seconds() // 60) % 1440
+
+def _sync_dst_offset():
+    """Refresh the cached DST-aware UTC offset from open-meteo.
+
+    Only needed when weather is disabled -- when it's on, show_weather()
+    and show_weather_persistent() already refresh this as a side effect of
+    their normal polling. Best-effort: leaves the previous value in place
+    (or the sleep_utc_offset fallback) on any failure.
+    """
+    global _dst_offset_seconds
+    try:
+        resp = requests_session.get(WEATHER_URL)
+        if resp.status_code == 200:
+            offset = resp.json().get("utc_offset_seconds")
+            if offset is not None:
+                _dst_offset_seconds = int(offset)
+    except Exception as e:
+        print("clock: dst sync failed: "+str(e))
 
 def update_sleep_state():
     """Poll the current time of day (rate-limited) and blank/restore the display accordingly."""
@@ -1310,6 +1344,8 @@ def set_labels_from_feed(flight_info):
     print("Labels: "+callsign+" "+airline_name+" | "+origin+"-"+destination+" | "+aircraft_full+" | "+str(speed_knots)+"kt")
 
 # ---- Weather ----
+_last_weather_ctime = ""  # most recent "time" field from a successful weather fetch
+
 def temp_colour(temp):
     if TEMP_UNIT == "F":
         if temp <= 32: return 0x0044FF
@@ -1337,7 +1373,58 @@ def is_daytime(sunrise_str, sunset_str, current_time_str):
     except:
         return True  # assume day if parse fails
 
+MONTH_NAMES = ("JAN","FEB","MAR","APR","MAY","JUN",
+               "JUL","AUG","SEP","OCT","NOV","DEC")
+
+def _clock_parts():
+    """(hour24, minute, month, day) for the current local time, or None.
+
+    Prefers the weather API's own time field -- already fetched, and
+    DST-aware since open-meteo resolves it from the "timezone" config -- and
+    falls back to the cruder UTC-offset time service the sleep feature uses,
+    for when weather is disabled or its last fetch failed.
+    """
+    if _last_weather_ctime:
+        try:
+            date_part, time_part = _last_weather_ctime.split('T')
+            _, month, day = date_part.split('-')
+            hour, minute = time_part[:5].split(':')
+            return int(hour), int(minute), int(month), int(day)
+        except (ValueError, IndexError):
+            pass
+    try:
+        t = time.localtime(_local_epoch_seconds())
+        return t.tm_hour, t.tm_min, t.tm_mon, t.tm_mday
+    except Exception as e:
+        print("clock: time unavailable: "+str(e))
+        return None
+
+def show_clock(duration=5):
+    parts = _clock_parts()
+    if not parts:
+        return
+    hour, minute, month, day = parts
+    ampm = "AM" if hour < 12 else "PM"
+    hour12 = hour % 12 or 12
+    time_str = "%d:%02d" % (hour12, minute)
+    date_str = "%s  %s %d" % (ampm, MONTH_NAMES[month-1], day)
+
+    cg = displayio.Group()
+    cl = adafruit_display_text.label.Label(FONT, color=0xFFFFFF, text=time_str, scale=2)
+    cl.x = (matrixportal.display.width - cl.bounding_box[2]*2)//2
+    cl.y = 11
+    dl = adafruit_display_text.label.Label(FONT, color=0xFFAA00, text=date_str)
+    dl.x = (matrixportal.display.width - dl.bounding_box[2])//2
+    dl.y = 27
+    cg.append(cl); cg.append(dl)
+    matrixportal.display.root_group = cg
+    print("Clock: "+time_str+" "+date_str)
+    for _ in range(duration*2): wfeed(); time.sleep(0.5)
+    matrixportal.display.root_group = g
+    gc.collect()
+
 def show_weather():
+    global _last_weather_ctime, _dst_offset_seconds
     try:
         resp = requests_session.get(WEATHER_URL)
         if resp.status_code==200:
@@ -1347,6 +1434,11 @@ def show_weather():
             code = int(cw["weathercode"])
             wind = int(cw["windspeed"])
             ctime = cw.get("time","")
+            if ctime:
+                _last_weather_ctime = ctime
+            offset = data.get("utc_offset_seconds")
+            if offset is not None:
+                _dst_offset_seconds = int(offset)
             cond = WEATHER_CODES.get(code,'Unknown')
 
             # Sunrise/sunset
@@ -1383,6 +1475,7 @@ def show_weather():
     gc.collect()
 
 def show_weather_persistent(duration=20):
+    global _last_weather_ctime, _dst_offset_seconds
     try:
         resp = requests_session.get(WEATHER_URL)
         if resp.status_code != 200:
@@ -1393,6 +1486,11 @@ def show_weather_persistent(duration=20):
         temp = int(cw["temperature"])
         code = int(cw["weathercode"])
         ctime = cw.get("time","")
+        if ctime:
+            _last_weather_ctime = ctime
+        offset = data.get("utc_offset_seconds")
+        if offset is not None:
+            _dst_offset_seconds = int(offset)
         cond = WEATHER_CODES.get(code,'Unknown')
 
         daily = data.get("daily",{})
@@ -1627,6 +1725,10 @@ while True:
     if SLEEP_ENABLED:
         update_sleep_state()
 
+    if ENABLE_CLOCK and not ENABLE_WEATHER and time.monotonic() > _next_dst_sync:
+        _next_dst_sync = time.monotonic() + DST_SYNC_INTERVAL
+        _sync_dst_offset()
+
     if SLEEP_ENABLED and _display_asleep:
         gc.collect()
         time.sleep(1)
@@ -1669,12 +1771,18 @@ while True:
 
             show_flight_queue(flights, raw, classes)
             if ENABLE_WEATHER:
+                if ENABLE_CLOCK:
+                    show_clock()
                 show_weather()
         else:
             last_mode = None
             if ENABLE_WEATHER:
+                if ENABLE_CLOCK:
+                    show_clock()
                 show_weather_persistent()
     elif ENABLE_WEATHER:
+        if ENABLE_CLOCK:
+            show_clock()
         show_weather_persistent()
 
     gc.collect()
