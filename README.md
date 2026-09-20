@@ -23,13 +23,14 @@ Shown weather and temperature of configured airport between flights. Displays te
 ### Clock
 
 A full-screen digital clock (12-hour, with AM/PM and the date) is shown for
-5 seconds before each weather screen. Time normally comes from Open-Meteo's
-own local timestamp — already fetched as part of the weather poll, and
-DST-aware since Open-Meteo resolves it from your `timezone` config. If
-weather is disabled, the same DST-aware offset is instead synced directly
-from Open-Meteo every few hours; only a device that has never synced falls
-back to the manual `sleep_utc_offset` config, which does not account for
-DST. Disable with `enable_clock: False`.
+5 seconds before each weather screen. The time itself is always a live read
+from Adafruit IO's free time service (not Open-Meteo's `current_weather`
+field, which is quantized to its model update interval and runs up to ~15
+minutes behind), shifted to local time by a DST-aware offset learned from
+Open-Meteo. That offset is refreshed as a side effect of the normal weather
+poll, or synced directly every few hours if weather is disabled; only a
+device that has never synced falls back to the manual `sleep_utc_offset`
+config, which does not account for DST. Disable with `enable_clock: False`.
 
 ---
 

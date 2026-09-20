@@ -1344,8 +1344,6 @@ def set_labels_from_feed(flight_info):
     print("Labels: "+callsign+" "+airline_name+" | "+origin+"-"+destination+" | "+aircraft_full+" | "+str(speed_knots)+"kt")
 
 # ---- Weather ----
-_last_weather_ctime = ""  # most recent "time" field from a successful weather fetch
-
 def temp_colour(temp):
     if TEMP_UNIT == "F":
         if temp <= 32: return 0x0044FF
@@ -1379,19 +1377,11 @@ MONTH_NAMES = ("JAN","FEB","MAR","APR","MAY","JUN",
 def _clock_parts():
     """(hour24, minute, month, day) for the current local time, or None.
 
-    Prefers the weather API's own time field -- already fetched, and
-    DST-aware since open-meteo resolves it from the "timezone" config -- and
-    falls back to the cruder UTC-offset time service the sleep feature uses,
-    for when weather is disabled or its last fetch failed.
+    Always derived from a fresh TIME_URL fetch plus the DST-aware offset --
+    not the weather API's own "time" field, which is quantized to its model
+    update interval (about every 15 minutes) and so runs visibly behind a
+    live clock.
     """
-    if _last_weather_ctime:
-        try:
-            date_part, time_part = _last_weather_ctime.split('T')
-            _, month, day = date_part.split('-')
-            hour, minute = time_part[:5].split(':')
-            return int(hour), int(minute), int(month), int(day)
-        except (ValueError, IndexError):
-            pass
     try:
         t = time.localtime(_local_epoch_seconds())
         return t.tm_hour, t.tm_min, t.tm_mon, t.tm_mday
@@ -1424,7 +1414,7 @@ def show_clock(duration=5):
     gc.collect()
 
 def show_weather():
-    global _last_weather_ctime, _dst_offset_seconds
+    global _dst_offset_seconds
     try:
         resp = requests_session.get(WEATHER_URL)
         if resp.status_code==200:
@@ -1434,8 +1424,6 @@ def show_weather():
             code = int(cw["weathercode"])
             wind = int(cw["windspeed"])
             ctime = cw.get("time","")
-            if ctime:
-                _last_weather_ctime = ctime
             offset = data.get("utc_offset_seconds")
             if offset is not None:
                 _dst_offset_seconds = int(offset)
@@ -1475,7 +1463,7 @@ def show_weather():
     gc.collect()
 
 def show_weather_persistent(duration=20):
-    global _last_weather_ctime, _dst_offset_seconds
+    global _dst_offset_seconds
     try:
         resp = requests_session.get(WEATHER_URL)
         if resp.status_code != 200:
@@ -1486,8 +1474,6 @@ def show_weather_persistent(duration=20):
         temp = int(cw["temperature"])
         code = int(cw["weathercode"])
         ctime = cw.get("time","")
-        if ctime:
-            _last_weather_ctime = ctime
         offset = data.get("utc_offset_seconds")
         if offset is not None:
             _dst_offset_seconds = int(offset)
