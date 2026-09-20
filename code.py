@@ -1409,7 +1409,13 @@ def show_clock(duration=5):
     cg.append(cl); cg.append(dl)
     matrixportal.display.root_group = cg
     print("Clock: "+time_str+" "+date_str)
-    for _ in range(duration*2): wfeed(); time.sleep(0.5)
+
+    # Flash the ":" every 2s: on for 1.5s, off for 0.5s. Purely cosmetic.
+    blank_str = time_str.replace(":", " ")
+    for i in range(duration*2):
+        wfeed()
+        time.sleep(0.5)
+        cl.text = blank_str if i % 4 == 3 else time_str
     matrixportal.display.root_group = g
     gc.collect()
 
