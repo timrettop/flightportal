@@ -7,6 +7,7 @@
 
 import json
 import os
+import time
 
 import microcontroller
 
@@ -213,6 +214,10 @@ def _check_and_apply(session, log, reset, on_installing):
             on_installing()
         except Exception as e:  # noqa: BLE001 - a display glitch must not abort a real update
             log("ota: on_installing callback failed: %r" % e)
+        # Let the "Updating" screen finish drawing before the heavy write
+        # traffic below starts; writes right on top of a display refresh is
+        # a known cause of the display blanking/fritzing mid-update.
+        time.sleep(1)
 
     _clear(recovery.STAGE_DIR)
     for path, want in pending:
