@@ -1229,6 +1229,21 @@ def display_flight():
 def clear_flight():
     label1.text=label2.text=label3.text=""
 
+def show_startup_version():
+    """Print and briefly flash the running release so it's obvious what's on
+    the device. Uses the git tag (e.g. "v8"), not the OTA build number
+    (commit count), since the tag is what a human actually recognises."""
+    try:
+        with open("/.version_tag") as f:
+            tag = f.read().strip()
+    except OSError:
+        tag = ""
+    build = state.version()
+    print("flightportal "+(tag or "dev")+" (build "+str(build)+")")
+    flap_all("", tag or "DEV", "")
+    time.sleep(1.5)
+    clear_flight()
+
 def set_labels_from_feed(flight_info):
     global label1_short,label1_long,label2_short,label2_long,label3_short,label3_long
     callsign    = flight_info[13] or flight_info[16] or ''
@@ -1597,6 +1612,8 @@ def show_flight_queue(flights, raw, classes=None):
         label1.color = ROW_ONE_COLOUR
         label2.color = ROW_TWO_COLOUR
         label3.color = ROW_THREE_COLOUR
+
+show_startup_version()
 
 last_flight=''
 last_mode=None

@@ -318,6 +318,28 @@ def test_marks_the_update_pending_confirmation(ota_root, trust_all, quiet):
     assert state.attempts() == 0
 
 
+def test_writes_the_release_tag_on_install(ota_root, trust_all, quiet):
+    session, _ = build_session({"code.py": b"new code"}, version=7, extra={"tag": "v7"})
+    updater.check_and_apply(session, log=quiet, reset=False)
+    assert read(ota_root / ".version_tag") == "v7"
+
+
+def test_writes_the_release_tag_on_version_only_bump(ota_root, trust_all, quiet):
+    (ota_root / "code.py").write_text("identical")
+    session, _ = build_session(
+        {"code.py": b"identical"}, version=9, extra={"tag": "v9"}
+    )
+    updater.check_and_apply(session, log=quiet, reset=False)
+    assert read(ota_root / ".version_tag") == "v9"
+
+
+def test_missing_tag_is_survivable(ota_root, trust_all, quiet):
+    """Older manifests without a "tag" field must not break the update."""
+    session, _ = build_session({"code.py": b"new code"}, version=7)
+    assert updater.check_and_apply(session, log=quiet, reset=False) is True
+    assert not (ota_root / ".version_tag").exists()
+
+
 def test_install_then_rollback_returns_the_original_file(ota_root, trust_all, quiet):
     """End to end: a bad update lands, never confirms, and boot.py undoes it."""
     state.set_version(4)

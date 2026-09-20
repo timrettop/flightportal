@@ -38,6 +38,21 @@ class UpdateError(Exception):
     pass
 
 
+def _write_version_tag(tag):
+    """Stash the human-readable release tag (e.g. "v8") for the application
+    to show at startup. Purely cosmetic -- state.version() (the commit count)
+    remains the source of truth for update comparisons, so a stale tag after
+    a rare rollback is harmless and self-heals on the next successful update.
+    """
+    if not tag:
+        return
+    try:
+        with open(recovery.ROOT + ".version_tag", "w") as f:
+            f.write(tag)
+    except OSError:
+        pass
+
+
 def _flatten(path):
     return path.replace("/", "~")
 
@@ -188,6 +203,7 @@ def _check_and_apply(session, log, reset, on_installing):
     if not pending:
         log("ota: v%d contains no file changes" % new_version)
         state.set_version(new_version)
+        _write_version_tag(manifest.get("tag"))
         return False
 
     log("ota: v%d -> %d, %d file(s)" % (current, new_version, len(pending)))
@@ -224,6 +240,7 @@ def _check_and_apply(session, log, reset, on_installing):
         log("ota: installed %s" % path)
 
     state.mark_pending(new_version)
+    _write_version_tag(manifest.get("tag"))
     try:
         os.sync()
     except AttributeError:

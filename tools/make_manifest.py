@@ -69,6 +69,16 @@ def main():
             ).strip()
         )
 
+    # Human-readable tag for the device to show at startup (e.g. "v8"), or
+    # "v8-3-gabcdef" when built ahead of the last tag. Cosmetic only -- the
+    # integer `version` above is what update comparisons actually use.
+    try:
+        tag = subprocess.check_output(
+            ["git", "describe", "--tags", "--always"], cwd=root
+        ).strip().decode()
+    except subprocess.CalledProcessError:
+        tag = ""
+
     files = {}
     for rel in included_paths(args.list, root):
         if rel in NEVER_SHIP:
@@ -80,6 +90,7 @@ def main():
 
     manifest = {
         "version": version,
+        "tag": tag,
         "base_url": f"https://raw.githubusercontent.com/{args.repo}/{args.sha}/",
         "files": files,
     }
@@ -99,7 +110,7 @@ def main():
     (out / "manifest.json").write_bytes(raw)
     (out / "manifest.sig").write_text(base64.b64encode(sig).decode())
 
-    print(f"version {version}, {len(files)} file(s)")
+    print(f"version {version} ({tag or 'no tag'}), {len(files)} file(s)")
     for k in files:
         print(f"  {k}")
 
