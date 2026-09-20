@@ -31,6 +31,7 @@ def _show_updating():
     flap_all("", "Updating", "")
 
 
+
 bell = None
 if _aio_configured():
     bell = Doorbell(
