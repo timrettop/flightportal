@@ -21,6 +21,7 @@ config = {
     'enable_clock':       True,  # full-screen clock shown before the weather screen
 
     'demo_mode':          False,  # True = scripted demo feed (needs demo_feed.py on the board)
+    'mem_log':            False,  # True = post free-memory readings to Adafruit IO (create feeds fp-py-free, fp-idf-free, fp-idf-largest first)
 
     # Screen sleep - blanks the display overnight (or whenever) to save power / avoid glare.
     # Current time is fetched from Adafruit IO's free time service (no account needed), which

@@ -5,7 +5,7 @@ import neopixel
 from adafruit_matrixportal.matrixportal import MatrixPortal
 from microcontroller import watchdog as w
 from watchdog import WatchDogMode
-import wifi, socketpool, ssl, adafruit_requests
+import wifi, adafruit_requests, adafruit_connection_manager, espidf
 from ota import state, updater
 from ota.doorbell import Doorbell
 from flightlogic import classify_flight, queue_mode, resolve_route, passes_direction_filter, parse_fr24_row, parse_hhmm, in_sleep_window
@@ -14,8 +14,13 @@ from flightlogic import classify_flight, queue_mode, resolve_route, passes_direc
 #w.timeout = 60
 #w.mode = WatchDogMode.RESET
 
-pool = socketpool.SocketPool(wifi.radio)
-session = adafruit_requests.Session(pool, ssl.create_default_context())
+# One shared network stack for the whole app (flight/weather fetches, OTA,
+# doorbell). Separate pools/sessions each hold their own open sockets and TLS
+# state, which starves CircuitPython's web workflow of sockets and RAM.
+pool = adafruit_connection_manager.get_radio_socketpool(wifi.radio)
+ssl_context = adafruit_connection_manager.get_radio_ssl_context(wifi.radio)
+session = adafruit_requests.Session(pool, ssl_context)
+requests_session = session
 
 _next_ota = time.monotonic() + 300      # first check 5 min after boot
 _confirm_at = time.monotonic() + 120    # confirm once we have survived 2 minutes
@@ -36,7 +41,7 @@ def _show_updating():
 bell = None
 if _aio_configured():
     bell = Doorbell(
-        pool, ssl.create_default_context(),
+        pool, ssl_context,
         os.getenv("AIO_USERNAME"), os.getenv("AIO_KEY"),
         poll_interval=3600,
         on_installing=_show_updating,
@@ -62,6 +67,7 @@ except ImportError:
     raise
 
 DEMO_MODE = config.get("demo_mode", False)
+MEM_LOG   = config.get("mem_log", False)
 if DEMO_MODE:
     from demo_feed import get_flights_demo
 
@@ -150,13 +156,61 @@ def checkConnection():
         return True
     return connect_wifi()
 
-connect_wifi()
+# CircuitPython's web workflow usually connects before code.py starts.
+if not wifi.radio.ipv4_address:
+    connect_wifi()
 
-def setup_requests():
-    pool = socketpool.SocketPool(wifi.radio)
-    return adafruit_requests.Session(pool, ssl.create_default_context())
 
-requests_session = setup_requests()
+def get_json(url, headers=None, timeout=10):
+    """GET a URL and return parsed JSON, or None on any failure.
+
+    The context manager releases the socket on every path -- success, non-200
+    and exceptions -- and the timeout stops a stalled server from hanging the
+    main loop (and the web workflow along with it).
+    """
+    try:
+        with requests_session.get(url, headers=headers, timeout=timeout) as resp:
+            if resp.status_code != 200:
+                print("HTTP "+str(resp.status_code)+" "+url[:60])
+                return None
+            return resp.json()
+    except Exception as e:
+        print("fetch error: "+str(e)+" "+url[:60])
+        return None
+
+
+# ---- Memory logging (config 'mem_log') ----
+# Posts free-memory readings to Adafruit IO feeds fp-py-free, fp-idf-free and
+# fp-idf-largest. Create those feeds on io.adafruit.com first: REST posts to a
+# missing feed return 404.
+MEM_LOG_INTERVAL = 150
+_next_mem_log = time.monotonic() + 60
+_boot_time = time.monotonic()
+
+def mem_stats():
+    gc.collect()
+    return {
+        "fp-py-free":     gc.mem_free(),
+        "fp-idf-free":    espidf.heap_caps_get_free_size(),
+        "fp-idf-largest": espidf.heap_caps_get_largest_free_block(),
+    }
+
+def log_mem():
+    stats = mem_stats()
+    print("mem up="+str(int(time.monotonic() - _boot_time))+"s "+str(stats))
+    if not _aio_configured():
+        return
+    user = os.getenv("AIO_USERNAME")
+    key = os.getenv("AIO_KEY")
+    for feed, value in stats.items():
+        url = "https://io.adafruit.com/api/v2/"+user+"/feeds/"+feed+"/data"
+        try:
+            with requests_session.post(url, json={"value": value},
+                                       headers={"X-AIO-Key": key}, timeout=10) as r:
+                if r.status_code not in (200, 201):
+                    print("aio log "+feed+": HTTP "+str(r.status_code))
+        except Exception as e:
+            print("aio log error: "+str(e))
 
 
 
@@ -817,82 +871,33 @@ WEATHER_CODES = {
 }
 
 
-def lookup_airline_hex(hex_code, requests_session):
+def lookup_airline_hex(hex_code):
     """Look up airline/operator from ICAO hex code via hexdb.io"""
-    try:
-        url = HEXDB_URL + hex_code.upper()
-        resp = requests_session.get(url)
-        if resp.status_code == 200:
-            data = resp.json()
-            operator = data.get("OperatorFlagCode","") or data.get("Operator","")
-            reg = data.get("Registration","")
-            return operator.strip(), reg.strip()
-    except Exception as e:
-        print("hexdb error:", e)
-    return "", ""
+    data = get_json(HEXDB_URL + hex_code.upper())
+    if not data:
+        return "", ""
+    operator = data.get("OperatorFlagCode","") or data.get("Operator","")
+    reg = data.get("Registration","")
+    return operator.strip(), reg.strip()
 
 
-def lookup_planespotters(hex_code, requests_session):
-    """Get operator for private/bizjet from planespotters.net - free, no key."""
-    try:
-        resp = requests_session.get(
-            PLANESPOTTERS_URL + hex_code.upper(),
-            headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"},
-            timeout=8
-        )
-        if resp.status_code == 200:
-            ac = resp.json().get("aircraft", [])
-            if ac:
-                a = ac[0]
-                operator = a.get("operator","") or a.get("airline",{}).get("name","")
-                reg      = a.get("registration","")
-                iata     = a.get("airline",{}).get("iata","")
-                return operator.strip(), reg.strip(), iata.strip()
-    except Exception as e:
-        print("Planespotters:", e)
-    return "", "", ""
-
-
-def lookup_opensky(hex_code, requests_session):
-    """Get operator/registration from OpenSky - free, no key."""
-    try:
-        resp = requests_session.get(OPENSKY_URL + hex_code.lower())
-        if resp.status_code == 200:
-            states = resp.json().get("states", [])
-            if states:
-                s = states[0]
-                # [0]=icao24 [1]=callsign [2]=origin_country [7]=baroalt
-                # [8]=onground [13]=squawk [14]=spi [15]=position_source
-                callsign = (s[1] or "").strip()
-                country  = s[2] or ""
-                return callsign, country
-    except Exception as e:
-        print("OpenSky:", e)
-    return "", ""
-
-
-def enrich_from_adsb(hex_code, requests_session):
+def enrich_from_adsb(hex_code):
     """Fetch extra flight info from adsb.lol using ICAO hex"""
-    try:
-        resp = requests_session.get(ADSB_URL + hex_code.upper())
-        if resp.status_code == 200:
-            data = resp.json()
-            ac = data.get("ac", [])
-            if ac:
-                a = ac[0]
-                return {
-                    "reg":       a.get("r",""),
-                    "operator":  a.get("ownOp","") or a.get("man",""),
-                    "origin":    a.get("orig",""),
-                    "dest":      a.get("dest",""),
-                    "flight":    a.get("flight","").strip(),
-                    "aircraft":  a.get("t",""),
-                    "alt":       a.get("alt_baro",0) or 0,
-                    "speed":     a.get("gs",0) or 0,
-                }
-    except Exception as e:
-        print("ADSB error:", e)
-    return {}
+    data = get_json(ADSB_URL + hex_code.upper())
+    ac = data.get("ac", []) if data else []
+    if not ac:
+        return {}
+    a = ac[0]
+    return {
+        "reg":       a.get("r",""),
+        "operator":  a.get("ownOp","") or a.get("man",""),
+        "origin":    a.get("orig",""),
+        "dest":      a.get("dest",""),
+        "flight":    a.get("flight","").strip(),
+        "aircraft":  a.get("t",""),
+        "alt":       a.get("alt_baro",0) or 0,
+        "speed":     a.get("gs",0) or 0,
+    }
 
 
 def speed_to_delay(kts):
@@ -930,7 +935,7 @@ def _local_epoch_seconds():
     manual sleep_utc_offset config -- which does not account for DST -- for
     a device that has never synced one.
     """
-    resp = requests_session.get(TIME_URL)
+    resp = requests_session.get(TIME_URL, timeout=10)
     try:
         utc_seconds = int(resp.text)
     finally:
@@ -953,14 +958,11 @@ def _sync_dst_offset():
     (or the sleep_utc_offset fallback) on any failure.
     """
     global _dst_offset_seconds
-    try:
-        resp = requests_session.get(WEATHER_URL)
-        if resp.status_code == 200:
-            offset = resp.json().get("utc_offset_seconds")
-            if offset is not None:
-                _dst_offset_seconds = int(offset)
-    except Exception as e:
-        print("clock: dst sync failed: "+str(e))
+    data = get_json(WEATHER_URL)
+    if data:
+        offset = data.get("utc_offset_seconds")
+        if offset is not None:
+            _dst_offset_seconds = int(offset)
 
 def update_sleep_state():
     """Poll the current time of day (rate-limited) and blank/restore the display accordingly."""
@@ -1308,14 +1310,7 @@ def set_labels_from_feed(flight_info):
 
     if needs_enrichment:
         # adsb.lol - best single source, gets route + operator
-        adsb = enrich_from_adsb(hex_code, requests_session)
-        gc.collect()
-
-    if needs_operator and not adsb.get("operator"):
-        # Only hit planespotters if airline truly unknown (private jets etc)
-        ps_op, ps_reg, _ = lookup_planespotters(hex_code, requests_session)
-        if ps_op: adsb["operator"] = ps_op
-        if ps_reg and not callsign: callsign = ps_reg
+        adsb = enrich_from_adsb(hex_code)
         gc.collect()
 
     # Fill gaps from ADS-B data
@@ -1422,9 +1417,8 @@ def show_clock(duration=5):
 def show_weather():
     global _dst_offset_seconds
     try:
-        resp = requests_session.get(WEATHER_URL)
-        if resp.status_code==200:
-            data = resp.json()
+        data = get_json(WEATHER_URL)
+        if data:
             cw   = data["current_weather"]
             temp = int(cw["temperature"])
             code = int(cw["weathercode"])
@@ -1471,11 +1465,10 @@ def show_weather():
 def show_weather_persistent(duration=20):
     global _dst_offset_seconds
     try:
-        resp = requests_session.get(WEATHER_URL)
-        if resp.status_code != 200:
+        data = get_json(WEATHER_URL)
+        if not data:
             time.sleep(duration)
             return
-        data = resp.json()
         cw   = data["current_weather"]
         temp = int(cw["temperature"])
         code = int(cw["weathercode"])
@@ -1544,9 +1537,8 @@ def position_check(lat, lon):
 
 def get_flights(url, headers):
     try:
-        resp = requests_session.get(url, headers=headers)
-        if resp.status_code == 200:
-            data = resp.json()
+        data = get_json(url, headers)
+        if data:
             flights = []; raw = {}
             for fid, fi in data.items():
                 if fid not in ("version", "full_count") and len(fi) > 13:
@@ -1581,7 +1573,6 @@ def get_flights(url, headers):
             else:
                 print("  no matches")
             return flights, raw
-        print("Flight API error:", resp.status_code)
         return [], {}
     except Exception as e:
         print("Flight error:", e); return [], {}
@@ -1712,6 +1703,10 @@ last_mode=None
 while True:
     checkConnection()
     wfeed()
+
+    if MEM_LOG and time.monotonic() > _next_mem_log:
+        _next_mem_log = time.monotonic() + MEM_LOG_INTERVAL
+        log_mem()
     print("memory free: "+str(gc.mem_free())) # type: ignore
 
     if SLEEP_ENABLED:
