@@ -8,7 +8,7 @@ from watchdog import WatchDogMode
 import wifi, adafruit_requests, adafruit_connection_manager, espidf
 from ota import state, updater
 from ota.doorbell import Doorbell
-from flightlogic import classify_flight, queue_mode, resolve_route, passes_direction_filter, parse_fr24_row, parse_hhmm, in_sleep_window
+from flightlogic import classify_flight, queue_mode, resolve_route, passes_direction_filter, parse_fr24_row, parse_hhmm, in_sleep_window, mirror_x
 
 # Watchdog disabled - WatchDogMode.RESET not supported on ESP32-S3 in CP9+
 #w.timeout = 60
@@ -85,6 +85,7 @@ SHOW_ARRIVALS     = config.get("show_arrivals", True)
 SHOW_DEPARTURES   = config.get("show_departures", True)
 ARRIVAL_HEADING   = config.get("arrival_heading", (HEADING_MIN + HEADING_MAX) / 2)
 HEADING_TOLERANCE = config.get("heading_tolerance", 50)
+MIRROR_ANIMATIONS = config.get("mirror_animations", False)
 TEMP_UNIT          = config.get("temp_unit", "F")
 MY_TIMEZONE        = config.get("timezone", "UTC")
 SHOW_FULL_AIRCRAFT = config.get("show_full_aircraft", False)
@@ -1121,12 +1122,17 @@ def make_anim_group(landing=False):
     pg.append(spd)
     return pg, tg
 
+def _anim_x(x):
+    """Screen x for a 40px-wide sprite, mirrored across the display when
+    MIRROR_ANIMATIONS is on so the plane travels the other way."""
+    return mirror_x(x, 40, matrixportal.display.width, MIRROR_ANIMATIONS)
+
 def plane_animation():
     pg, tg = make_anim_group(False)
     matrixportal.display.root_group = pg
     tg.y = matrixportal.display.height//2 - 6
     for i in range(-40, matrixportal.display.width+40):
-        tg.x=i; wfeed(); time.sleep(_plane_speed_delay)
+        tg.x=_anim_x(i); wfeed(); time.sleep(_plane_speed_delay)
     matrixportal.display.root_group = g
     gc.collect()
 
@@ -1167,10 +1173,12 @@ def make_runway_bmp(width, side='left'):
     return bmp, pal
 
 def plane_animation_take_off():
-    rw_bmp, rw_pal = make_runway_bmp(matrixportal.display.width, 'left')
+    # Normally rolls left-to-right; mirrored, it rolls right-to-left
+    rw_bmp, rw_pal = make_runway_bmp(matrixportal.display.width, 'right' if MIRROR_ANIMATIONS else 'left')
     rw_tg = displayio.TileGrid(rw_bmp, pixel_shader=rw_pal, x=0, y=24)
     bmp, pal = make_plane_bmp(_current_airline)
     ptg = displayio.TileGrid(bmp, pixel_shader=pal)
+    ptg.flip_x = MIRROR_ANIMATIONS
     spd = adafruit_display_text.label.Label(FONT, color=0xAAAAAA, text=str(_plane_speed_knots)+"kt")
     spd.x=1; spd.y=4
     pg = displayio.Group()
@@ -1178,32 +1186,37 @@ def plane_animation_take_off():
     matrixportal.display.root_group = pg
     steps = matrixportal.display.width+24
     for i in range(steps):
-        ptg.x=-40+i
+        x=-40+i
+        ptg.x=_anim_x(x)
         ptg.y=8-(i*10//steps)
         wfeed(); time.sleep(_plane_speed_delay)
-        if ptg.x>matrixportal.display.width or ptg.y<-20: break
+        if x>matrixportal.display.width or ptg.y<-20: break
     matrixportal.display.root_group = g
     gc.collect()
 
 def plane_animation_landing():
-    rw_bmp, rw_pal = make_runway_bmp(matrixportal.display.width, 'right')
+    # Normally descends right-to-left; mirrored, it descends left-to-right
+    rw_bmp, rw_pal = make_runway_bmp(matrixportal.display.width, 'left' if MIRROR_ANIMATIONS else 'right')
     rw_tg = displayio.TileGrid(rw_bmp, pixel_shader=rw_pal, x=0, y=24)
     bmp, pal = make_landing_bmp(_current_airline)
     ltg = displayio.TileGrid(bmp, pixel_shader=pal)
+    ltg.flip_x = MIRROR_ANIMATIONS
     spd = adafruit_display_text.label.Label(FONT, color=0xAAAAAA, text=str(_plane_speed_knots)+"kt")
     spd.x=1; spd.y=4
     pg = displayio.Group()
     pg.append(rw_tg); pg.append(ltg); # pg.append(spd)
     matrixportal.display.root_group = pg
     # Nose-first: enter upper-right, descend steeply to runway level lower-left
+    # (upper-left to lower-right when mirrored)
     steps = matrixportal.display.width + 40
     for i in range(steps):
         # x moves right to left: starts off right edge, ends off left edge
-        ltg.x = matrixportal.display.width - i
+        x = matrixportal.display.width - i  # unmirrored position
+        ltg.x = _anim_x(x)
         # y descends from -16 (above screen) to 12 (runway level)
         ltg.y = -16 + (i * 28 // steps)
         wfeed(); time.sleep(_plane_speed_delay)
-        if ltg.x < -40 or ltg.y > 14: break
+        if x < -40 or ltg.y > 14: break
     matrixportal.display.root_group = g
     gc.collect()
 

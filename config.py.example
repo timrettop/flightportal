@@ -8,6 +8,7 @@ config = {
     'heading_tolerance':  50,   # +/- degrees around that course for heading-based classification
     'heading_min':        240,  # only applicable if filter_direction is True
     'heading_max':        300,  # only applicable if filter_direction is True
+    'mirror_animations':  False, # True = flip the landing/takeoff animations to run the opposite way
     'min_altitude':       0,     # ft; ignore traffic below this
     'max_altitude':       7000,  # ft; ignore traffic above this
     'temp_unit':          'F',  # 'F' or 'C'

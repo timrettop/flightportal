@@ -103,6 +103,18 @@ def passes_direction_filter(cls, show_arrivals, show_departures):
     return True
 
 
+def mirror_x(x, sprite_width, screen_width, mirror):
+    """Reflect a sprite's left-edge x position across the screen's vertical
+    centre line, so an animation runs in the opposite direction. Returns `x`
+    unchanged when `mirror` is False.
+
+    A sprite at x occupies [x, x + sprite_width); its mirror image occupies
+    [screen_width - x - sprite_width, screen_width - x).
+    """
+    if not mirror:
+        return x
+    return screen_width - sprite_width - x
+
 def parse_hhmm(s):
     """'HH:MM' -> minutes since midnight. Returns 0 if the string is malformed."""
     try:

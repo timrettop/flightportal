@@ -16,9 +16,31 @@ from flightlogic import (
     passes_direction_filter,
     parse_hhmm,
     in_sleep_window,
+    mirror_x,
 )
 
 HOME = "ZRH"
+
+
+# ---- mirror_x ----
+def test_mirror_x_off_is_identity():
+    for x in (-40, 0, 12, 64):
+        assert mirror_x(x, 40, 64, False) == x
+
+
+@pytest.mark.parametrize("x,expected", [
+    (-40, 64),   # fully off the left edge -> fully off the right edge
+    (64, -40),   # fully off the right edge -> fully off the left edge
+    (0, 24),     # flush left -> flush right (64 - 40)
+    (12, 12),    # centred sprite stays centred
+])
+def test_mirror_x_reflects(x, expected):
+    assert mirror_x(x, 40, 64, True) == expected
+
+
+def test_mirror_x_is_an_involution():
+    for x in range(-40, 65):
+        assert mirror_x(mirror_x(x, 40, 64, True), 40, 64, True) == x
 
 
 # ---- angular_diff ----

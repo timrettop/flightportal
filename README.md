@@ -107,6 +107,7 @@ config = {
     'show_arrivals':         True,
     'show_departures':       True,
     'heading_tolerance':      50,
+    'mirror_animations':    False,  # Flip landing/take-off animations to the opposite direction
  
     'temp_unit':              'F',
     'timezone':          'UTC',
