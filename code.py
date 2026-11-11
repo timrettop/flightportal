@@ -191,7 +191,7 @@ _boot_time = time.monotonic()
 def mem_stats():
     gc.collect()
     return {
-        "fp-py-free":     gc.mem_free(),
+        "fp-py-free":     gc.mem_free(), # type: ignore
         "fp-idf-free":    espidf.heap_caps_get_free_size(),
         "fp-idf-largest": espidf.heap_caps_get_largest_free_block(),
     }
@@ -928,23 +928,44 @@ _display_asleep     = False
 _last_sleep_check   = 0
 _dst_offset_seconds = None  # learned from open-meteo; None until the first successful sync
 
-def _local_epoch_seconds():
-    """Seconds since the epoch, in local time.
+_sleep_fail_count = 0
+SLEEP_FAIL_WAKE   = 5    # consecutive failures before forcing the display on
+SLEEP_FAIL_RESET  = 20   # consecutive failures before rebooting
 
-    Uses the DST-aware offset last learned from open-meteo (via a weather
-    fetch or _sync_dst_offset()) when one is available, falling back to the
-    manual sleep_utc_offset config -- which does not account for DST -- for
-    a device that has never synced one.
-    """
-    resp = requests_session.get(TIME_URL, timeout=10)
+TIME_RESYNC_INTERVAL = 1800
+_time_anchor    = None   # (utc_seconds, monotonic at fetch)
+_next_time_sync = 0
+
+def _fetch_utc_seconds():
+    resp = None
     try:
-        utc_seconds = int(resp.text)
+        resp = requests_session.get(TIME_URL, timeout=10)
+        if resp.status_code != 200:
+            raise ValueError("time HTTP %d" % resp.status_code)
+        return int(resp.text.strip())
     finally:
-        resp.close()
+        if resp is not None:
+            resp.close()
+
+def _utc_seconds_now():
+    global _time_anchor, _next_time_sync
+    now = time.monotonic()
+    if now >= _next_time_sync:
+        try:
+            _time_anchor = (_fetch_utc_seconds(), now)
+            _next_time_sync = now + TIME_RESYNC_INTERVAL
+        except Exception as e:
+            _next_time_sync = now + 60   # retry in a minute, keep old anchor
+            print("time sync failed: "+str(e))
+            if _time_anchor is None:
+                raise
+    return _time_anchor[0] + int(now - _time_anchor[1]) # type: ignore
+
+def _local_epoch_seconds():
     offset = _dst_offset_seconds
     if offset is None:
         offset = int(SLEEP_UTC_OFFSET * 3600)
-    return utc_seconds + offset
+    return _utc_seconds_now() + offset
 
 def _current_local_minutes():
     """Minutes since local midnight."""
@@ -967,7 +988,7 @@ def _sync_dst_offset():
 
 def update_sleep_state():
     """Poll the current time of day (rate-limited) and blank/restore the display accordingly."""
-    global _display_asleep, _last_sleep_check
+    global _display_asleep, _last_sleep_check, _sleep_fail_count
     now = time.monotonic()
     if now - _last_sleep_check < SLEEP_CHECK_INTERVAL:
         return
@@ -975,8 +996,17 @@ def update_sleep_state():
     try:
         minutes = _current_local_minutes()
         should_sleep = in_sleep_window(minutes, parse_hhmm(SLEEP_START), parse_hhmm(SLEEP_END))
+        _sleep_fail_count = 0
     except Exception as e:
-        print("sleep: time check failed: "+str(e))
+        _sleep_fail_count += 1
+        print("sleep: time check failed (%d): %s" % (_sleep_fail_count, e))
+        if _sleep_fail_count >= SLEEP_FAIL_RESET:
+            import microcontroller
+            microcontroller.reset()
+        if _sleep_fail_count >= SLEEP_FAIL_WAKE and _display_asleep:
+            print("sleep: failing open, waking display")
+            matrixportal.display.brightness = 1.0
+            _display_asleep = False
         return
     if should_sleep and not _display_asleep:
         print("sleep: entering sleep window")
