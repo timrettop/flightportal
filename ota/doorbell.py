@@ -25,6 +25,7 @@ class Doorbell:
         feed="ota",
         poll_interval=3600,
         mqtt_loop_interval=5,
+        keep_alive=30,
         log=print,
         on_installing=None,
     ):
@@ -46,7 +47,7 @@ class Doorbell:
             socket_pool=socket_pool,
             ssl_context=ssl_context,
             is_ssl=True,
-            keep_alive=120,
+            keep_alive=keep_alive,
         )
         self.client.on_message = self._on_message
 
