@@ -1,3 +1,4 @@
+import ssl
 import os, time, gc, math
 import board, displayio, terminalio
 import adafruit_display_text.label
@@ -5,7 +6,7 @@ import neopixel
 from adafruit_matrixportal.matrixportal import MatrixPortal
 from microcontroller import watchdog as w
 from watchdog import WatchDogMode
-import wifi, adafruit_requests, adafruit_connection_manager, espidf
+import wifi, socketpool,adafruit_requests, adafruit_connection_manager, espidf
 from ota import state, updater
 from ota.doorbell import Doorbell
 from flightlogic import classify_flight, queue_mode, resolve_route, passes_direction_filter, parse_fr24_row, parse_hhmm, in_sleep_window, mirror_x
@@ -36,7 +37,15 @@ def _show_updating():
     matrixportal.display.root_group = g
     flap_all("", "Updating", "")
 
+_aio_session = None
+_aio_fail_cycles = 0
 
+def _get_aio_session():
+    global _aio_session
+    if _aio_session is None:
+        pool = socketpool.SocketPool(wifi.radio)
+        _aio_session = adafruit_requests.Session(pool, ssl.create_default_context())
+    return _aio_session
 
 bell = None
 if _aio_configured():
@@ -197,21 +206,34 @@ def mem_stats():
     }
 
 def log_mem():
+    global _aio_session, _aio_fail_cycles
     stats = mem_stats()
     print("mem up="+str(int(time.monotonic() - _boot_time))+"s "+str(stats))
     if not _aio_configured():
         return
     user = os.getenv("AIO_USERNAME")
     key = os.getenv("AIO_KEY")
+    ok = 0
     for feed, value in stats.items():
         url = "https://io.adafruit.com/api/v2/"+user+"/feeds/"+feed+"/data"
         try:
-            with requests_session.post(url, json={"value": value},
+            with _get_aio_session().post(url, json={"value": value},
                                        headers={"X-AIO-Key": key}, timeout=10) as r:
-                if r.status_code not in (200, 201):
+                if r.status_code in (200,201):
+                    ok += 1
+                else:
+                    time.sleep(30)
                     print("aio log "+feed+": HTTP "+str(r.status_code))
         except Exception as e:
+            _aio_session = None
             print("aio log error: "+str(e))
+    if ok:
+        _aio_fail_cycles = 0
+    else:
+        _aio_fail_cycles += 1
+        if _aio_fail_cycles >= 5:
+            import microcontroller
+            microcontroller.reset()
 
 
 
